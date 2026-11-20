@@ -2,7 +2,8 @@ import { state, load, save, setCourts, resetRounds, resetAll } from './state.js'
 import { addPlayer, addBulk, toggleActive, cycleLevel, cycleGender, removePlayer, hasHistory } from './players.js';
 import { generateRound } from './matcher.js';
 import { renderAll, showTab, toast } from './ui.js';
-import { roundText, rankText, copyText, shareText } from './share.js';
+import { roundText, rankText, copyText, shareText, roundTextKakao, rankTextKakao } from './share.js';
+import { kakaoEnabled, preloadKakao, sendKakaoText, KAKAO_TEXT_MAX } from './kakao.js';
 import { initInvite } from './invite.js';
 
 let newLevel = 'C';
@@ -28,8 +29,16 @@ async function copy(text, okMsg) {
   toast((await copyText(text)) ? okMsg : '복사에 실패했어요. 직접 선택해 복사해 주세요.');
 }
 
-async function share(text, what) {
+// ① 카카오 SDK로 채팅방 선택 바로 열기 → ② 휴대폰 공유 창 → ③ 복사
+async function share(text, kakaoText, what) {
   if (!text) { toast('공유할 내용이 없어요.'); return; }
+  if (kakaoEnabled()) {
+    if (kakaoText) {
+      try { if (sendKakaoText(kakaoText)) return; } catch (e) { /* 아래 대체 방식 */ }
+    } else {
+      toast(`${what}가 길어 카톡 바로 공유(200자)가 안 돼요. 공유 창에서 카카오톡을 골라 주세요.`);
+    }
+  }
   const res = await shareText(text);
   if (res === 'copied') toast(`이 기기는 바로 공유가 안 돼서 ${what}를 복사했어요. 카톡에 붙여넣기 하세요!`);
   else if (res === 'fail') toast('공유에 실패했어요. 복사 버튼을 이용해 주세요.');
@@ -83,8 +92,8 @@ const actions = {
 
   'copy-round': () => copy(roundText(), '배정표를 복사했어요. 카톡에 붙여넣기 하세요!'),
   'copy-rank': () => copy(rankText(), '순위표를 복사했어요. 카톡에 붙여넣기 하세요!'),
-  'share-round': () => share(roundText(), '배정표'),
-  'share-rank': () => share(rankText(), '순위표'),
+  'share-round': () => share(roundText(), roundTextKakao(KAKAO_TEXT_MAX), '배정표'),
+  'share-rank': () => share(rankText(), rankTextKakao(KAKAO_TEXT_MAX), '순위표'),
 
   'reset-rounds': () => {
     if (confirm('라운드와 승패 기록을 모두 지울까요? (참가자 명단은 유지)')) { resetRounds(); state.tab = 'players'; commit(); toast('새 경기를 시작해요.'); }
@@ -154,3 +163,4 @@ function handleRemoteJoin({ name, level, gender }) {
 load();
 renderAll();
 initInvite({ onJoin: handleRemoteJoin, toast, copyText });
+preloadKakao().catch(() => { /* SDK 로드 실패 시 공유 창/복사로 대체 */ });
