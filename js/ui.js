@@ -15,13 +15,15 @@ const chip = (id) => {
   return p ? `<div class="pl">${esc(p.name)}${gdBadge(p.gender)}${lvBadge(p.level)}</div>` : '<div class="pl">?</div>';
 };
 
+// 실제로 다른 탭으로 바뀔 때만 맨 위로 (결과 입력 등 같은 탭 안의 다시 그리기는 스크롤 유지)
 export function showTab(tab) {
+  const changed = $('#tab-' + tab).hidden;
   state.tab = tab;
   for (const name of ['players', 'round', 'rank']) {
     $('#tab-' + name).hidden = name !== tab;
   }
   document.querySelectorAll('.tabbar button').forEach((b) => b.classList.toggle('on', b.dataset.tab === tab));
-  window.scrollTo(0, 0);
+  if (changed) window.scrollTo(0, 0);
 }
 
 let toastTimer;
@@ -95,6 +97,8 @@ export function renderRound() {
   }
   const ri = n - 1;
   const cur = state.rounds[ri];
+  // 다시 그려도 펼쳐 둔 지난 라운드는 계속 펼쳐 둔다
+  const openPast = new Set([...view.querySelectorAll('.past details[open]')].map((d) => d.dataset.r));
   const past = state.rounds.slice(0, -1).map((r, i) => ({ r, i })).reverse();
   view.innerHTML = `
     <div class="round-head"><h2>${cur.no}라운드</h2><span>결과 ${doneCount(cur)}/${cur.matches.length}</span></div>
@@ -107,7 +111,7 @@ export function renderRound() {
       <button type="button" class="btn" data-action="copy-round">📋 배정표 복사</button>
     </div>
     ${past.length ? `<div class="past"><div class="hint" style="margin-bottom:8px">지난 라운드 (결과 수정 가능)</div>
-      ${past.map(({ r, i }) => `<details><summary>${r.no}라운드 · 결과 ${doneCount(r)}/${r.matches.length}</summary>${r.matches.map((m) => matchCard(m, i)).join('')}</details>`).join('')}</div>` : ''}`;
+      ${past.map(({ r, i }) => `<details data-r="${i}"${openPast.has(String(i)) ? ' open' : ''}><summary>${r.no}라운드 · 결과 ${doneCount(r)}/${r.matches.length}</summary>${r.matches.map((m) => matchCard(m, i)).join('')}</details>`).join('')}</div>` : ''}`;
 }
 
 export function renderRank() {
