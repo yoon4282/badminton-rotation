@@ -8,8 +8,10 @@ export const WEIGHTS = {
   teamDiff: 6,   // 두 팀 급수 점수 합 차이
   spread: 1,     // 한 코트 내 급수 편차
   sameGroup: 4,  // 직전 라운드와 같은 4명이 다시 한 코트
-  uneven: 12,    // 성별 구성이 다른 두 팀 (예: 남복 vs 혼복, 남복 vs 여복)
-  mixedMiss: 6,  // 혼복 경험이 없는 사람이 혼복이 아닌 코트에 있을 때 (1명당)
+  uneven: 30,    // 성별 구성이 다른 두 팀 (예: 남복 vs 혼복, 남복 vs 여복)
+  mixedMiss: 5,  // 혼복 경험이 없는 사람이 혼복이 아닌 코트에 있을 때 (1명당)
+  sameMiss: 3,   // 남복/여복 경험이 없는 사람이 혼복 코트에 있을 때 (1명당)
+  typeRepeat: 2, // 같은 유형을 다른 유형보다 더 많이 한 횟수 × 이 값 (1명당) → 유형이 골고루 돌게
 };
 const TYPE_LABEL = { M: '남복', F: '여복', X: '혼복' };
 
@@ -29,11 +31,16 @@ const inc = (map, k) => map.set(k, (map.get(k) || 0) + 1);
 const cnt = (map, a, b) => map.get(pairKey(a, b)) || 0;
 
 function buildHistory(rounds, gender) {
-  const partner = new Map(), opp = new Map(), played = new Map(), last = new Map(), mixed = new Map();
+  const partner = new Map(), opp = new Map(), played = new Map(), last = new Map(), types = new Map();
   rounds.forEach((r, idx) => {
     for (const m of r.matches) {
-      if (matchType(m.teamA, m.teamB, gender) === '혼복') {
-        for (const id of [...m.teamA, ...m.teamB]) inc(mixed, id);
+      const t = matchType(m.teamA, m.teamB, gender);
+      if (t) {
+        for (const id of [...m.teamA, ...m.teamB]) {
+          const tc = types.get(id) || {};
+          tc[t] = (tc[t] || 0) + 1;
+          types.set(id, tc);
+        }
       }
       inc(partner, pairKey(m.teamA[0], m.teamA[1]));
       inc(partner, pairKey(m.teamB[0], m.teamB[1]));
@@ -44,7 +51,7 @@ function buildHistory(rounds, gender) {
   const lastGroups = new Set();
   const lr = rounds[rounds.length - 1];
   if (lr) for (const m of lr.matches) lastGroups.add(groupKey([...m.teamA, ...m.teamB]));
-  return { partner, opp, played, last, lastGroups, mixed };
+  return { partner, opp, played, last, lastGroups, types };
 }
 
 const SPLITS = [[0, 1, 2, 3], [0, 2, 1, 3], [0, 3, 1, 2]];
@@ -66,8 +73,17 @@ function bestSplit(g, ctx) {
     const type = matchType(a, b, ctx.gender);
     let gpen = 0;
     if (type === '기타') gpen += W.uneven;
-    if (type !== '혼복') {
-      for (const id of g) if (ctx.gender.get(id) && !ctx.mixed.get(id)) gpen += W.mixedMiss;
+    for (const id of g) {
+      const gd = ctx.gender.get(id);
+      if (!gd) continue;
+      const tc = ctx.types.get(id) || {};
+      if (type && type !== '기타') {
+        // 본인이 할 수 있는 유형(남복·혼복 / 여복·혼복) 중 가장 적게 한 것 대비 얼마나 더 했는지
+        const own = gd === 'M' ? '남복' : '여복';
+        gpen += W.typeRepeat * ((tc[type] || 0) - Math.min(tc[own] || 0, tc['혼복'] || 0));
+      }
+      if (type !== '혼복' && !tc['혼복']) gpen += W.mixedMiss;
+      if (type === '혼복' && !tc[gd === 'M' ? '남복' : '여복']) gpen += W.sameMiss;
     }
     const cost = W.partner * (p1 * p1 + p2 * p2) + W.opponent * o +
                  W.teamDiff * diff + W.spread * spread + same + gpen;
@@ -87,11 +103,13 @@ function shuffle(arr, rng) {
 const slice4 = (arr, c) => arr.slice(c * 4, c * 4 + 4);
 
 // 선발된 인원을 코트로 나누고 두 사람 맞교환으로 총비용을 줄인다
-function arrange(selected, ctx, rng) {
+// extras(휴식 후보)는 경기 수(eff)가 같은 출전자와만 맞바꾼다. 최종 휴식자 목록으로 extras를 제자리 갱신한다.
+function arrange(selected, extras, effOf, ctx, rng) {
   const nC = selected.length / 4;
-  let bestTotal = Infinity, bestArr = null;
+  let bestTotal = Infinity, bestArr = null, bestEx = extras.slice();
   for (let r = 0; r < RESTARTS; r++) {
     const arr = shuffle(selected.slice(), rng);
+    const ex = extras.slice();
     const costs = [];
     for (let c = 0; c < nC; c++) costs[c] = bestSplit(slice4(arr, c), ctx).cost;
     let improved = true, guard = 0;
@@ -110,12 +128,26 @@ function arrange(selected, ctx, rng) {
             [arr[i], arr[j]] = [arr[j], arr[i]];
           }
         }
+        // 출전자 i ↔ 휴식 후보 k 맞바꾸기 (경기 수가 같을 때만)
+        const ci = i >> 2;
+        for (let k = 0; k < ex.length; k++) {
+          if (effOf.get(ex[k]) !== effOf.get(arr[i])) continue;
+          [arr[i], ex[k]] = [ex[k], arr[i]];
+          const ni = bestSplit(slice4(arr, ci), ctx).cost;
+          if (ni < costs[ci] - 1e-9) {
+            costs[ci] = ni; improved = true;
+          } else {
+            [arr[i], ex[k]] = [ex[k], arr[i]];
+          }
+        }
       }
     }
     const total = costs.reduce((s, x) => s + x, 0);
-    if (total < bestTotal) { bestTotal = total; bestArr = arr.slice(); }
+    if (total < bestTotal) { bestTotal = total; bestArr = arr.slice(); bestEx = ex.slice(); }
     if (total === 0) break;
   }
+  extras.length = 0;
+  extras.push(...bestEx);
   return bestArr;
 }
 
@@ -147,10 +179,15 @@ export function generateRound({ players, rounds, courts, rng = Math.random }) {
   const ctx = {
     score: new Map(players.map((p) => [p.id, LEVEL_SCORE[p.level] || 3])),
     partner: h.partner, opp: h.opp, lastGroups: h.lastGroups,
-    gender, mixed: h.mixed,
+    gender, types: h.types,
   };
 
-  const arr = arrange(selected, ctx, rng);
+  // 경기 수가 같은 휴식 후보는 출전자와 맞바꿀 수 있다(공정성 유지, 성별 구성만 조정)
+  const effOf = new Map(info.map((x) => [x.id, x.eff]));
+  const extras = resting.slice();
+  const arr = arrange(selected, extras, effOf, ctx, rng);
+  resting.length = 0;
+  resting.push(...extras);
   const matches = [];
   for (let c = 0; c < slots / 4; c++) {
     const s = bestSplit(slice4(arr, c), ctx);
