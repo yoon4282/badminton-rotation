@@ -5,6 +5,7 @@ import { renderAll, showTab, toast } from './ui.js';
 import { roundText, rankText, copyText, shareText, roundTextKakao, rankTextKakao } from './share.js';
 import { kakaoEnabled, preloadKakao, sendKakaoText, KAKAO_TEXT_MAX } from './kakao.js';
 import { initInvite } from './invite.js';
+import { rememberAll, lookup } from './roster.js';
 
 let newLevel = 'C';
 let newGender = null; // 추가할 때마다 직접 선택하도록 시작은 미선택
@@ -51,10 +52,10 @@ const actions = {
 
   'bulk-add': () => {
     const ta = document.getElementById('bulk-input');
-    const { added, skipped, defaulted, noGender } = addBulk(ta.value);
+    const { added, skipped, defaulted, noGender, recalled } = addBulk(ta.value);
     if (!added && !skipped) { toast('붙여넣은 내용이 없어요.'); return; }
     ta.value = '';
-    toast(`${added}명 추가` + (skipped ? ` · 중복 ${skipped}명 제외` : '') + (defaulted ? ` · 급수 없는 ${defaulted}명은 C` : '') +
+    toast(`${added}명 추가` + (recalled ? ` · 기억된 회원 ${recalled}명 자동 입력` : '') + (skipped ? ` · 중복 ${skipped}명 제외` : '') + (defaulted ? ` · 급수 없는 ${defaulted}명은 C` : '') +
       (noGender ? ` · 성별 미지정 ${noGender}명(목록에서 ?를 눌러 지정)` : ''));
     commit();
   },
@@ -135,6 +136,18 @@ document.addEventListener('change', (e) => {
   }
 });
 
+function selectSeg(segId, attr, value) {
+  document.querySelectorAll(`#${segId} button`).forEach((b) => b.setAttribute('aria-pressed', String(b.dataset[attr] === value)));
+}
+
+// 직접 입력: 기억된 회원 이름을 치면 성별·급수를 자동으로 골라 둔다
+document.getElementById('name-input').addEventListener('input', (e) => {
+  const mem = lookup(e.target.value.trim());
+  if (!mem) return;
+  if (mem.gender) { newGender = mem.gender; selectSeg('gender-seg', 'gender', mem.gender); }
+  if (mem.level) { newLevel = mem.level; selectSeg('level-seg', 'level', mem.level); }
+});
+
 document.getElementById('add-form').addEventListener('submit', (e) => {
   e.preventDefault();
   const input = document.getElementById('name-input');
@@ -162,6 +175,7 @@ function handleRemoteJoin({ name, level, gender }) {
 }
 
 load();
+rememberAll(state.players); // 이미 있는 명단도 회원으로 기억
 renderAll();
 initInvite({ onJoin: handleRemoteJoin, toast, copyText });
 preloadKakao().catch(() => { /* SDK 로드 실패 시 공유 창/복사로 대체 */ });
