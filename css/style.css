@@ -95,7 +95,6 @@ input[type=text]:focus, textarea:focus { outline: 2px solid var(--primary); bord
 .gdbtn { border: 0; min-width: 40px; height: 40px; border-radius: 10px; font-weight: 700; font-size: 14px; }
 .mtype { float: right; font-size: 13px; font-weight: 800; padding: 2px 10px; border-radius: 99px; background: #eee; color: #555; }
 .mtype.t-mix { background: #f3e5ff; color: #7b2cbf; } .mtype.t-m { background: #dbe8ff; color: #1c4fb5; } .mtype.t-f { background: #ffdce9; color: #b0235d; }
-.mixnote { margin: 0 0 10px; padding: 8px 12px; border-radius: 12px; background: #f3e5ff; color: #5a1e91; font-size: 14px; }
 .seg.two button { flex: 1; }
 
 /* 참가자 목록 */
