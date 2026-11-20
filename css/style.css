@@ -55,6 +55,7 @@ main { padding: 12px; }
 .btn.danger { color: var(--danger); border-color: #f0c9c9; }
 .btn.big { width: 100%; min-height: 54px; font-size: 17px; margin-top: 10px; }
 .btn:disabled { opacity: .45; }
+.btn.kakao { background: #fee500; border-color: #fee500; color: #191919; }
 
 /* 코트 스테퍼 */
 .stepper { display: flex; align-items: center; gap: 4px; }
