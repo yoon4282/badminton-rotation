@@ -40,6 +40,10 @@ export function lookup(name) {
   return read()[name] || null;
 }
 
+export function memberNames() {
+  return Object.keys(read());
+}
+
 export function memberCount() {
   return Object.keys(read()).length;
 }
