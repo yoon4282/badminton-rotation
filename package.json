@@ -1,0 +1,8 @@
+{
+  "name": "badminton-rotation",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node test/matcher.test.mjs"
+  }
+}

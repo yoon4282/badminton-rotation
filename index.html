@@ -1,0 +1,138 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#14705a">
+  <title>배드민턴 대진표</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <!-- 참가자 전용 화면 (?join=방ID 로 접속했을 때만 표시) -->
+  <section id="join-app" class="join-app" hidden>
+    <div class="join-card">
+      <h1>🏸 모임 참가 등록</h1>
+      <form id="join-form" autocomplete="off">
+        <input id="join-name" type="text" maxlength="12" placeholder="이름" enterkeyhint="done">
+        <div class="seg two" id="join-gender" role="radiogroup" aria-label="성별">
+          <button type="button" data-gender="M" aria-pressed="false">남</button>
+          <button type="button" data-gender="F" aria-pressed="false">여</button>
+        </div>
+        <div class="seg" id="join-level" role="radiogroup" aria-label="급수">
+          <button type="button" data-level="A" aria-pressed="false">A</button>
+          <button type="button" data-level="B" aria-pressed="false">B</button>
+          <button type="button" data-level="C" aria-pressed="true">C</button>
+          <button type="button" data-level="D" aria-pressed="false">D</button>
+          <button type="button" data-level="초심" aria-pressed="false">초심</button>
+        </div>
+        <p id="join-error" class="join-error" role="alert" hidden></p>
+        <button type="submit" id="join-submit" class="btn primary big">모임 참가하기</button>
+      </form>
+      <div id="join-done" hidden>
+        <div class="done-mark">✅</div>
+        <p class="done-title">등록 완료! 운영진 화면에 추가되었습니다.</p>
+        <p class="hint"><strong id="join-done-name"></strong> 님, 잠시만 기다려 주세요.</p>
+        <button type="button" id="join-more" class="btn big">한 명 더 등록하기</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- QR 초대 모달 (운영진 화면) -->
+  <div id="qr-modal" class="modal" role="dialog" aria-modal="true" aria-labelledby="qr-title" hidden>
+    <div class="modal-card">
+      <h2 id="qr-title">QR로 참가자 초대</h2>
+      <p id="qr-status" class="qr-status"></p>
+      <div id="qr-box" class="qr-box"></div>
+      <input id="qr-url" type="text" readonly hidden aria-label="참가 링크">
+      <p id="qr-count" class="hint"></p>
+      <button type="button" id="qr-copy" class="btn big" disabled>🔗 참가 링크 복사</button>
+      <button type="button" id="qr-retry" class="btn big" hidden>다시 연결</button>
+      <button type="button" id="qr-close" class="btn primary big">닫기 (연결은 유지돼요)</button>
+    </div>
+  </div>
+
+  <header class="topbar">
+    <h1>🏸 배드민턴 대진표</h1>
+    <span id="round-badge" class="badge" hidden></span>
+  </header>
+
+  <main>
+    <!-- 참가자 탭 -->
+    <section id="tab-players" class="tab">
+      <div class="card">
+        <div class="row between">
+          <div>
+            <strong>코트 수</strong>
+            <div class="hint" id="court-hint"></div>
+          </div>
+          <div class="stepper">
+            <button type="button" data-action="court-dec" aria-label="코트 줄이기">−</button>
+            <output id="court-count">2</output>
+            <button type="button" data-action="court-inc" aria-label="코트 늘리기">＋</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <form id="add-form" autocomplete="off">
+          <input id="name-input" type="text" maxlength="12" placeholder="이름 (지각자도 여기서 추가)" enterkeyhint="done" required>
+          <div class="seg" id="gender-seg" role="radiogroup" aria-label="성별">
+            <button type="button" data-gender="M" aria-pressed="false">남</button>
+            <button type="button" data-gender="F" aria-pressed="false">여</button>
+          </div>
+          <div class="seg" id="level-seg" role="radiogroup" aria-label="급수">
+            <button type="button" data-level="A" aria-pressed="false">A</button>
+            <button type="button" data-level="B" aria-pressed="false">B</button>
+            <button type="button" data-level="C" aria-pressed="true">C</button>
+            <button type="button" data-level="D" aria-pressed="false">D</button>
+            <button type="button" data-level="초심" aria-pressed="false">초심</button>
+          </div>
+          <button type="submit" class="btn primary big">참가자 추가</button>
+        </form>
+        <button type="button" id="qr-open" class="btn big">📱 QR 초대 코드 열기</button>
+        <details class="bulk">
+          <summary>여러 명 한 번에 붙여넣기</summary>
+          <textarea id="bulk-input" rows="6" placeholder="한 줄에 한 명씩&#10;김철수 남 B&#10;이영희 여 C&#10;박민수 남 A&#10;1. 최지우 여 초심"></textarea>
+          <button type="button" class="btn big" data-action="bulk-add">일괄 추가</button>
+          <p class="hint">‘남/여’와 급수는 이름 뒤에 순서 상관없이 적어요. 급수를 생략하면 C, 성별을 생략하면 미지정(혼복 배정 제외)이에요. 이미 있는 이름은 건너뜁니다.</p>
+        </details>
+      </div>
+
+      <div class="card">
+        <div class="row between">
+          <strong>참가자</strong>
+          <span id="player-summary" class="hint"></span>
+        </div>
+        <ul id="player-list" class="plist"></ul>
+        <p class="hint">급수 글자를 누르면 바뀌고, 스위치로 휴식·조기귀가를 켜고 끌 수 있어요. 변경은 다음 라운드(또는 ‘다시 짜기’)부터 반영돼요.</p>
+      </div>
+
+      <div class="card">
+        <div class="row gap">
+          <button type="button" class="btn grow" data-action="reset-rounds">새 경기 시작<br><small>명단 유지·기록 삭제</small></button>
+          <button type="button" class="btn danger grow" data-action="reset-all">전체 초기화</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- 대진 탭 -->
+    <section id="tab-round" class="tab" hidden>
+      <div id="round-view"></div>
+    </section>
+
+    <!-- 순위 탭 -->
+    <section id="tab-rank" class="tab" hidden>
+      <div id="rank-view"></div>
+    </section>
+  </main>
+
+  <nav class="tabbar" aria-label="메뉴">
+    <button type="button" data-tab="players"><span>👥</span>참가자</button>
+    <button type="button" data-tab="round"><span>🏸</span>대진</button>
+    <button type="button" data-tab="rank"><span>🏆</span>순위</button>
+  </nav>
+
+  <div id="toast" role="status" aria-live="polite"></div>
+  <script type="module" src="js/boot.js"></script>
+</body>
+</html>
