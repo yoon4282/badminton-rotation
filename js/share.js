@@ -30,6 +30,43 @@ export function rankText() {
   return lines.join('\n');
 }
 
+// ── 카톡 바로 공유용 짧은 텍스트 (최대 max자) ──
+const nameOnly = (id) => {
+  const p = state.players.find((x) => x.id === id);
+  return p ? p.name : '?';
+};
+const fits = (lines, max) => lines.join('\n').length <= max;
+
+// 배정표: 전체 → 급수·유형 뺀 축약본 순으로 시도. 그래도 넘치면 null(잘린 대진표는 보내지 않음)
+export function roundTextKakao(max) {
+  const full = roundText();
+  if (!full || full.length <= max) return full || null;
+  const r = state.rounds[state.rounds.length - 1];
+  const lines = [`🏸 ${r.no}라운드`];
+  for (const m of r.matches) {
+    lines.push(`${m.court}코트 ${m.teamA.map(nameOnly).join('·')} vs ${m.teamB.map(nameOnly).join('·')}`);
+  }
+  if (r.resting.length) lines.push(`💤 ${r.resting.map(nameOnly).join(',')}`);
+  return fits(lines, max) ? lines.join('\n') : null;
+}
+
+// 순위표: 축약 형식으로 들어가는 만큼 넣고 나머지는 "…외 n명"
+export function rankTextKakao(max) {
+  const full = rankText();
+  if (!full || full.length <= max) return full || null;
+  const rows = ranking(state).filter((r) => r.games > 0);
+  const lines = ['🏆 현재 순위'];
+  for (let i = 0; i < rows.length; i++) {
+    const r = rows[i];
+    const line = `${r.rank}. ${r.player.name} ${r.wins}승${r.losses}패`;
+    const rest = rows.length - i - 1;
+    const tail = rest ? [`…외 ${rest}명`] : [];
+    if (!fits([...lines, line, ...tail], max)) { lines.push(`…외 ${rows.length - i}명`); break; }
+    lines.push(line);
+  }
+  return lines.join('\n');
+}
+
 // 휴대폰 공유 시트(카카오톡 등)로 바로 보내기. 지원하지 않으면 클립보드 복사로 대체.
 // 반환: 'shared' | 'cancel' | 'copied' | 'fail'
 export async function shareText(text) {
