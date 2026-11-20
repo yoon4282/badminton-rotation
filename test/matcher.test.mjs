@@ -84,21 +84,83 @@ assert.ok(generateRound({ players: mk(3), rounds: [], courts: 2 }).error);
   assert.equal(noGender, 1);
 }
 
-// 7) 혼복: 남녀 균형 모임에서 모두 혼복을 한 번 이상 + 한 코트의 두 팀은 같은 유형
+// 7) 한 코트의 두 팀은 같은 유형 (전원 출전 12명은 '기타' 없음)
 {
-  for (const [n, courts, rnds] of [[12, 3, 4], [14, 3, 5], [10, 2, 5]]) {
+  for (const [n, courts, rnds] of [[12, 3, 6], [14, 3, 5], [10, 2, 5]]) {
     const players = mk(n), rounds = [];
     play(players, rounds, courts, rnds);
-    const mixed = new Set();
+    let uneven = 0;
     for (const r of rounds) for (const m of r.matches) {
       // 휴식자가 있으면 출전자 성비가 홀수로 갈려 '기타'가 불가피할 수 있어 전원 출전(12명)일 때만 엄격 검사
       if (n === 12) assert.ok(['남복', '여복', '혼복'].includes(m.type), '불균형 유형: ' + m.type);
-      if (m.type === '혼복') [...m.teamA, ...m.teamB].forEach((id) => mixed.add(id));
+      if (m.type === '기타') uneven++;
     }
-    const missing = players.filter((p) => !mixed.has(p.id)).length;
-    console.log(`[7] ${n}명 ${courts}코트 ${rnds}라운드 혼복 미경험:`, missing);
-    assert.equal(missing, 0);
+    console.log(`[7] ${n}명 ${courts}코트 ${rnds}라운드 불균형 경기:`, uneven);
   }
+}
+
+// 7-2) 유형 비율 남복:여복:혼복 ≈ 3:2:1 (남12·여8, 4코트, 6라운드, 20회 평균)
+{
+  const tot = { '남복': 0, '여복': 0, '혼복': 0, '기타': 0 }, SEEDS = 20;
+  for (let s = 0; s < SEEDS; s++) {
+    const players = Array.from({ length: 20 }, (_, i) => ({ id: i + 1, name: 'P' + i, level: LEVELS[i % 5], gender: i < 12 ? 'M' : 'F', active: true }));
+    const rounds = [];
+    play(players, rounds, 4, 6);
+    for (const r of rounds) for (const m of r.matches) tot[m.type]++;
+  }
+  const avg = Object.fromEntries(Object.entries(tot).map(([k, v]) => [k, v / SEEDS]));
+  console.log('[7-2] 24경기 중 평균 남복/여복/혼복/기타:', avg['남복'], avg['여복'], avg['혼복'], avg['기타'], '(목표 12/8/4)');
+  assert.ok(avg['남복'] > avg['여복'] && avg['여복'] > avg['혼복'], '비율 순서가 남복 > 여복 > 혼복이 아님');
+  assert.ok(avg['혼복'] <= 6, '혼복이 너무 많음');
+}
+
+// 8) 여성이 적은 모임(남8·여6, 3코트, 6라운드)에서도 여복이 고르게 잡힘 (20회 평균)
+{
+  let missing = 0, uneven = 0, SEEDS = 20;
+  for (let s = 0; s < SEEDS; s++) {
+    const players = Array.from({ length: 14 }, (_, i) => ({ id: i + 1, name: 'P' + i, level: 'BCDA'[i % 4], gender: i < 8 ? 'M' : 'F', active: true }));
+    const rounds = [];
+    play(players, rounds, 3, 6);
+    const ff = new Set();
+    for (const r of rounds) for (const m of r.matches) {
+      if (m.type === '기타') uneven++;
+      if (m.type === '여복') [...m.teamA, ...m.teamB].forEach((id) => ff.add(id));
+    }
+    missing += players.filter((p) => p.gender === 'F' && !ff.has(p.id)).length;
+  }
+  console.log('[8] 여복 못한 여성 평균:', (missing / SEEDS).toFixed(2), '| 불균형 경기 평균:', (uneven / SEEDS).toFixed(2));
+  assert.ok(missing / SEEDS < 1, '여복이 너무 적게 잡힘');
+}
+
+// 9) 카톡 투표 참여자 옮겨 적기: 한 줄에 여러 명 + 표시가 섞인 경우
+{
+  const pick = (t) => parseBulk(t).entries.map((e) => `${e.name}:${e.gender}:${e.levelGiven ? e.level : '-'}`);
+  assert.deepEqual(pick('김철수, 이영희, 박민수'), ['김철수:null:-', '이영희:null:-', '박민수:null:-']);
+  assert.deepEqual(pick('김철수 이영희 박민수'), ['김철수:null:-', '이영희:null:-', '박민수:null:-']);
+  assert.deepEqual(pick('김철수B·이영희 여 A, 박민수님'), ['김철수:null:B', '이영희:F:A', '박민수:null:-']);
+  assert.deepEqual(pick('김철수 남 B 이영희 여 C'), ['김철수:M:B', '이영희:F:C']);
+  assert.deepEqual(pick('Bob Smith, 최지우'), ['Bob Smith:null:-', '최지우:null:-']);
+}
+
+// 10) 회원 기억: 한 번 등록한 사람은 이름만 적어도 성별·급수 자동 입력
+{
+  const { state } = await import('../js/state.js');
+  const { addBulk, addPlayer } = await import('../js/players.js');
+  state.players = []; state.rounds = []; state.nextId = 1;
+  addPlayer('김철수', 'A', 'M');
+  addBulk('이영희 여 B');
+  state.players = []; state.nextId = 1; // 다음 모임
+  const res = addBulk('김철수, 이영희, 새사람');
+  const by = Object.fromEntries(state.players.map((p) => [p.name, `${p.gender}:${p.level}`]));
+  assert.deepEqual(by, { '김철수': 'M:A', '이영희': 'F:B', '새사람': 'null:C' });
+  assert.equal(res.recalled, 2);
+  assert.equal(res.noGender, 1);
+  assert.equal(res.defaulted, 1);
+  // 직접 적은 값이 기억보다 우선
+  state.players = [];
+  addBulk('김철수 C');
+  assert.equal(state.players[0].level, 'C');
+  assert.equal(state.players[0].gender, 'M');
 }
 
 console.log('모든 테스트 통과');
