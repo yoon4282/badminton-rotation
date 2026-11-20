@@ -1,0 +1,4 @@
+// 카카오 Developers → 내 애플리케이션 → 앱 키 → "JavaScript 키"를 붙여넣으세요.
+// (JavaScript 키는 웹에 공개되는 용도의 키라 코드에 넣어도 됩니다. 등록한 도메인에서만 동작해요.)
+// 비워 두면 카톡 바로 공유 대신 휴대폰 공유 창 → 복사 순서로 동작합니다.
+export const KAKAO_JS_KEY = 'b40c19703d793f7e0309cf377b1bce2f';
