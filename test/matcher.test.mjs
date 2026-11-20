@@ -163,4 +163,27 @@ assert.ok(generateRound({ players: mk(3), rounds: [], courts: 2 }).error);
   assert.equal(state.players[0].gender, 'M');
 }
 
+// 11) 투표 캡처 OCR 글자에서 이름 후보 뽑기 (화면 문구·시간·잡음 제거, 한 글자 틀린 회원 이름 보정)
+{
+  const { extractCandidates } = await import('../js/ocr-parse.js');
+  const ocr = `오후 3:42  ▼ 88%
+< 투표 참여자 7명
+토요일 정모 참석
+| 김철수
+ㅣ 이영희님
+박민스
+최지우 여
+Bob
+불참
+정우성
+2명 · 마감`;
+  const c = extractCandidates(ocr, ['김철수', '박민수', '이영희']);
+  const names = c.map((x) => x.name);
+  console.log('[11] 후보:', c.map((x) => `${x.name}${x.raw ? '(' + x.raw + ')' : ''}${x.likely ? '✓' : ''}`).join(', '));
+  assert.deepEqual(names, ['김철수', '이영희', '박민수', '최지우', 'Bob', '정우성']);
+  assert.equal(c.find((x) => x.name === '박민수').raw, '박민스');
+  assert.equal(c.find((x) => x.name === '최지우').gender, 'F');
+  assert.equal(c.find((x) => x.name === 'Bob').likely, false);
+}
+
 console.log('모든 테스트 통과');
