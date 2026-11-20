@@ -1,181 +1,54 @@
-import { state, load, save, setCourts, resetRounds, resetAll } from './state.js';
-import { addPlayer, addBulk, toggleActive, cycleLevel, cycleGender, removePlayer, hasHistory } from './players.js';
-import { generateRound } from './matcher.js';
-import { renderAll, showTab, toast } from './ui.js';
-import { roundText, rankText, copyText, shareText, roundTextKakao, rankTextKakao } from './share.js';
-import { kakaoEnabled, preloadKakao, sendKakaoText, KAKAO_TEXT_MAX } from './kakao.js';
-import { initInvite } from './invite.js';
-import { rememberAll, lookup } from './roster.js';
+// 회원 기억: 한 번 등록한 사람의 성별·급수를 이름으로 기억해 두었다가 다음 모임에 자동으로 채운다.
+// '전체 초기화'를 해도 지워지지 않는다(명단·기록과 별도 저장).
+const KEY = 'badminton-members-v1';
+let cache = null;
 
-let newLevel = 'C';
-let newGender = null; // 추가할 때마다 직접 선택하도록 시작은 미선택
-
-function commit() {
-  save();
-  renderAll();
+function read() {
+  if (cache) return cache;
+  cache = {};
+  try {
+    const d = JSON.parse(localStorage.getItem(KEY) || '{}');
+    if (d && typeof d === 'object') cache = d;
+  } catch (e) { /* localStorage 없음(테스트) 또는 손상 */ }
+  return cache;
 }
 
-function makeRound(replaceLast) {
-  const base = replaceLast ? state.rounds.slice(0, -1) : state.rounds;
-  const res = generateRound({ players: state.players, rounds: base, courts: state.courts });
-  if (res.error) { toast(res.error); return; }
-  if (replaceLast) state.rounds[state.rounds.length - 1] = res.round;
-  else state.rounds.push(res.round);
-  state.tab = 'round';
-  commit();
-  window.scrollTo(0, 0); // 새 라운드는 맨 위부터 보이게
+function write() {
+  try { localStorage.setItem(KEY, JSON.stringify(cache)); } catch (e) { /* 무시 */ }
 }
 
-async function copy(text, okMsg) {
-  if (!text) { toast('복사할 내용이 없어요.'); return; }
-  toast((await copyText(text)) ? okMsg : '복사에 실패했어요. 직접 선택해 복사해 주세요.');
+// 성별은 알 때만 덮어쓴다(미지정으로 바꿔도 예전 정보는 유지)
+export function remember(p) {
+  if (!p || !p.name) return;
+  const r = read();
+  const prev = r[p.name] || {};
+  r[p.name] = { gender: p.gender || prev.gender || null, level: p.level || prev.level || 'C', at: Date.now() };
+  write();
 }
 
-// ① 카카오 SDK로 채팅방 선택 바로 열기 → ② 휴대폰 공유 창 → ③ 복사
-async function share(text, kakaoText, what) {
-  if (!text) { toast('공유할 내용이 없어요.'); return; }
-  if (kakaoEnabled()) {
-    if (kakaoText) {
-      try { if (sendKakaoText(kakaoText)) return; } catch (e) { /* 아래 대체 방식 */ }
-    } else {
-      toast(`${what}가 길어 카톡 바로 공유(200자)가 안 돼요. 공유 창에서 카카오톡을 골라 주세요.`);
-    }
+export function rememberAll(players) {
+  const r = read();
+  for (const p of players) {
+    if (!p.name) continue;
+    const prev = r[p.name] || {};
+    r[p.name] = { gender: p.gender || prev.gender || null, level: p.level || prev.level || 'C', at: prev.at || Date.now() };
   }
-  const res = await shareText(text);
-  if (res === 'copied') toast(`이 기기는 바로 공유가 안 돼서 ${what}를 복사했어요. 카톡에 붙여넣기 하세요!`);
-  else if (res === 'fail') toast('공유에 실패했어요. 복사 버튼을 이용해 주세요.');
+  write();
 }
 
-const actions = {
-  'court-inc': () => { setCourts(state.courts + 1); commit(); },
-  'court-dec': () => { setCourts(state.courts - 1); commit(); },
-
-  'bulk-add': () => {
-    const ta = document.getElementById('bulk-input');
-    const { added, skipped, defaulted, noGender, recalled } = addBulk(ta.value);
-    if (!added && !skipped) { toast('붙여넣은 내용이 없어요.'); return; }
-    ta.value = '';
-    toast(`${added}명 추가` + (recalled ? ` · 기억된 회원 ${recalled}명 자동 입력` : '') + (skipped ? ` · 중복 ${skipped}명 제외` : '') + (defaulted ? ` · 급수 없는 ${defaulted}명은 C` : '') +
-      (noGender ? ` · 성별 미지정 ${noGender}명(목록에서 ?를 눌러 지정)` : ''));
-    commit();
-  },
-
-  'cycle-level': (el) => { cycleLevel(+el.dataset.id); commit(); },
-  'cycle-gender': (el) => { cycleGender(+el.dataset.id); commit(); },
-
-  remove: (el) => {
-    const id = +el.dataset.id;
-    if (hasHistory(id)) { toast('경기 기록이 있어 삭제할 수 없어요. 스위치로 휴식 처리하세요.'); return; }
-    if (confirm('이 참가자를 삭제할까요?')) { removePlayer(id); commit(); }
-  },
-
-  'gen-round': () => makeRound(false),
-
-  'next-round': () => {
-    const cur = state.rounds[state.rounds.length - 1];
-    if (cur && cur.matches.some((m) => !m.winner) && !confirm('결과가 입력되지 않은 코트가 있어요. 그래도 다음 라운드로 갈까요?')) return;
-    makeRound(false);
-  },
-
-  regen: () => {
-    const cur = state.rounds[state.rounds.length - 1];
-    if (!cur) return;
-    if (cur.matches.some((m) => m.winner) && !confirm('입력한 결과가 지워져요. 다시 짤까요?')) return;
-    makeRound(true);
-    toast('현재 라운드를 다시 짰어요.');
-  },
-
-  win: (el) => {
-    const m = state.rounds[+el.dataset.r]?.matches[+el.dataset.m];
-    if (!m) return;
-    m.winner = m.winner === el.dataset.team ? null : el.dataset.team; // 같은 버튼 다시 누르면 취소
-    commit();
-  },
-
-  'copy-round': () => copy(roundText(), '배정표를 복사했어요. 카톡에 붙여넣기 하세요!'),
-  'copy-rank': () => copy(rankText(), '순위표를 복사했어요. 카톡에 붙여넣기 하세요!'),
-  'share-round': () => share(roundText(), roundTextKakao(KAKAO_TEXT_MAX), '배정표'),
-  'share-rank': () => share(rankText(), rankTextKakao(KAKAO_TEXT_MAX), '순위표'),
-
-  'reset-rounds': () => {
-    if (confirm('라운드와 승패 기록을 모두 지울까요? (참가자 명단은 유지)')) { resetRounds(); state.tab = 'players'; commit(); toast('새 경기를 시작해요.'); }
-  },
-  'reset-all': () => {
-    if (confirm('명단과 기록을 전부 삭제할까요?')) { resetAll(); commit(); toast('초기화했어요.'); }
-  },
-};
-
-document.addEventListener('click', (e) => {
-  const tab = e.target.closest('.tabbar button');
-  if (tab) { showTab(tab.dataset.tab); save(); return; }
-
-  const lvl = e.target.closest('#level-seg button');
-  if (lvl) {
-    newLevel = lvl.dataset.level;
-    document.querySelectorAll('#level-seg button').forEach((b) => b.setAttribute('aria-pressed', String(b === lvl)));
-    return;
-  }
-
-  const gnd = e.target.closest('#gender-seg button');
-  if (gnd) {
-    newGender = gnd.dataset.gender;
-    document.querySelectorAll('#gender-seg button').forEach((b) => b.setAttribute('aria-pressed', String(b === gnd)));
-    return;
-  }
-
-  const el = e.target.closest('[data-action]');
-  if (el && el.type !== 'checkbox' && actions[el.dataset.action]) actions[el.dataset.action](el);
-});
-
-document.addEventListener('change', (e) => {
-  const el = e.target;
-  if (el.dataset && el.dataset.action === 'toggle') {
-    const p = toggleActive(+el.dataset.id);
-    commit();
-    if (p) toast(`${p.name}: ${p.active ? '참가' : '휴식'} · 다음 라운드부터 반영돼요`);
-  }
-});
-
-function selectSeg(segId, attr, value) {
-  document.querySelectorAll(`#${segId} button`).forEach((b) => b.setAttribute('aria-pressed', String(b.dataset[attr] === value)));
+export function lookup(name) {
+  return read()[name] || null;
 }
 
-// 직접 입력: 기억된 회원 이름을 치면 성별·급수를 자동으로 골라 둔다
-document.getElementById('name-input').addEventListener('input', (e) => {
-  const mem = lookup(e.target.value.trim());
-  if (!mem) return;
-  if (mem.gender) { newGender = mem.gender; selectSeg('gender-seg', 'gender', mem.gender); }
-  if (mem.level) { newLevel = mem.level; selectSeg('level-seg', 'level', mem.level); }
-});
-
-document.getElementById('add-form').addEventListener('submit', (e) => {
-  e.preventDefault();
-  const input = document.getElementById('name-input');
-  if (!newGender) { toast('성별(남/여)을 먼저 선택해 주세요.'); return; }
-  const p = addPlayer(input.value, newLevel, newGender);
-  if (!p) return;
-  input.value = '';
-  input.focus();
-  commit();
-  toast(`${p.name}(${p.gender === 'M' ? '남' : '여'}·${p.level}) 추가`);
-});
-
-// QR 초대: 참가자가 보낸 정보를 명단에 추가. addPlayer는 joinedRound=현재 라운드 수, 경기 0회로 등록되고
-// matcher의 지각자 규칙(평균 보정 + 오래 쉰 순)에 따라 다음 라운드에서 우선 배정된다.
-function handleRemoteJoin({ name, level, gender }) {
-  if (state.players.length >= 100) return { ok: false, error: '참가 인원이 가득 찼어요.' };
-  if (state.players.some((p) => p.name === name)) {
-    return { ok: false, error: '같은 이름이 이미 등록돼 있어요. 이름 뒤에 숫자나 성을 붙여 주세요.' };
-  }
-  const p = addPlayer(name, level, gender);
-  if (!p) return { ok: false, error: '이름을 입력해 주세요.' };
-  commit();
-  toast(`${p.name}(${p.level})님이 합류했습니다!`);
-  return { ok: true, name: p.name, level: p.level };
+export function memberNames() {
+  return Object.keys(read());
 }
 
-load();
-rememberAll(state.players); // 이미 있는 명단도 회원으로 기억
-renderAll();
-initInvite({ onJoin: handleRemoteJoin, toast, copyText });
-preloadKakao().catch(() => { /* SDK 로드 실패 시 공유 창/복사로 대체 */ });
+export function memberCount() {
+  return Object.keys(read()).length;
+}
+
+export function clearMembers() {
+  cache = {};
+  write();
+}
