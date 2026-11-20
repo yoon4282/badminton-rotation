@@ -2,7 +2,7 @@ import { state, load, save, setCourts, resetRounds, resetAll } from './state.js'
 import { addPlayer, addBulk, toggleActive, cycleLevel, cycleGender, removePlayer, hasHistory } from './players.js';
 import { generateRound } from './matcher.js';
 import { renderAll, showTab, toast } from './ui.js';
-import { roundText, rankText, copyText } from './share.js';
+import { roundText, rankText, copyText, shareText } from './share.js';
 import { initInvite } from './invite.js';
 
 let newLevel = 'C';
@@ -26,6 +26,13 @@ function makeRound(replaceLast) {
 async function copy(text, okMsg) {
   if (!text) { toast('복사할 내용이 없어요.'); return; }
   toast((await copyText(text)) ? okMsg : '복사에 실패했어요. 직접 선택해 복사해 주세요.');
+}
+
+async function share(text, what) {
+  if (!text) { toast('공유할 내용이 없어요.'); return; }
+  const res = await shareText(text);
+  if (res === 'copied') toast(`이 기기는 바로 공유가 안 돼서 ${what}를 복사했어요. 카톡에 붙여넣기 하세요!`);
+  else if (res === 'fail') toast('공유에 실패했어요. 복사 버튼을 이용해 주세요.');
 }
 
 const actions = {
@@ -76,6 +83,8 @@ const actions = {
 
   'copy-round': () => copy(roundText(), '배정표를 복사했어요. 카톡에 붙여넣기 하세요!'),
   'copy-rank': () => copy(rankText(), '순위표를 복사했어요. 카톡에 붙여넣기 하세요!'),
+  'share-round': () => share(roundText(), '배정표'),
+  'share-rank': () => share(rankText(), '순위표'),
 
   'reset-rounds': () => {
     if (confirm('라운드와 승패 기록을 모두 지울까요? (참가자 명단은 유지)')) { resetRounds(); state.tab = 'players'; commit(); toast('새 경기를 시작해요.'); }
