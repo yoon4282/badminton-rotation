@@ -197,6 +197,22 @@ body.guest .topbar, body.guest main, body.guest .tabbar { display: none; }
 .qr-box img, .qr-box canvas { max-width: 100%; height: auto; }
 #qr-url { margin-top: 6px; font-size: 13px; }
 body.modal-open { overflow: hidden; }
+
+/* 투표 캡처 인식 */
+.ocr-bar { height: 8px; border-radius: 99px; background: var(--line); overflow: hidden; margin: 4px 0 8px; }
+.ocr-bar span { display: block; height: 100%; width: 0; background: var(--primary); transition: width .2s; }
+.ocr-list { list-style: none; margin: 6px 0 0; padding: 0; text-align: left; }
+.ocr-row { display: flex; align-items: center; gap: 8px; padding: 6px 0; border-top: 1px solid var(--line); }
+.ocr-row:first-child { border-top: 0; }
+.ocr-row input[type=checkbox] { width: 24px; height: 24px; flex: none; accent-color: var(--primary); }
+.ocr-row.off { opacity: .5; }
+.ocr-name { flex: 1; min-width: 0; }
+.ocr-name input[type=text] { padding: 9px 10px; font-weight: 600; }
+.ocr-name small { display: block; color: var(--muted); font-size: 12px; margin-top: 2px; }
+.ocr-tag { flex: none; font-size: 12px; font-weight: 700; padding: 3px 8px; border-radius: 99px; }
+.ocr-tag.ok { background: #e3f6e8; color: #1e7a3a; }
+.ocr-tag.new { background: #fff3d6; color: #8a5a00; }
+.ocr-tag.dup { background: #eee; color: #777; }
 #toast { z-index: 60; }
 
 @media (max-width: 360px) {
