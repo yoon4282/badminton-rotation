@@ -15,15 +15,6 @@ const chip = (id) => {
   return p ? `<div class="pl">${esc(p.name)}${gdBadge(p.gender)}${lvBadge(p.level)}</div>` : '<div class="pl">?</div>';
 };
 
-// 혼복을 아직 못 해본 활성 참가자 이름 (남·여 모두 있어야 의미 있음)
-function mixedPending() {
-  const mixed = new Set();
-  for (const r of state.rounds) for (const m of r.matches) {
-    if (m.type === '혼복') [...m.teamA, ...m.teamB].forEach((id) => mixed.add(id));
-  }
-  return state.players.filter((p) => p.active && p.gender && !mixed.has(p.id)).map((p) => p.name);
-}
-
 export function showTab(tab) {
   state.tab = tab;
   for (const name of ['players', 'round', 'rank']) {
@@ -107,13 +98,6 @@ export function renderRound() {
   const past = state.rounds.slice(0, -1).map((r, i) => ({ r, i })).reverse();
   view.innerHTML = `
     <div class="round-head"><h2>${cur.no}라운드</h2><span>결과 ${doneCount(cur)}/${cur.matches.length}</span></div>
-    ${(() => {
-      const left = mixedPending();
-      const hasBoth = state.players.some((p) => p.active && p.gender === 'M') && state.players.some((p) => p.active && p.gender === 'F');
-      return hasBoth && left.length
-        ? `<p class="mixnote">💜 혼복 미경험 ${left.length}명: ${left.map(esc).join(', ')}</p>`
-        : '';
-    })()}
     ${cur.matches.map((m) => matchCard(m, ri)).join('')}
     ${cur.resting.length ? `<div class="resting">💤 휴식: ${cur.resting.map((id) => { const p = byId(id); return p ? esc(p.name) : '?'; }).join(', ')}</div>` : ''}
     <div class="actions">
