@@ -30,6 +30,21 @@ export function rankText() {
   return lines.join('\n');
 }
 
+// 휴대폰 공유 시트(카카오톡 등)로 바로 보내기. 지원하지 않으면 클립보드 복사로 대체.
+// 반환: 'shared' | 'cancel' | 'copied' | 'fail'
+export async function shareText(text) {
+  if (navigator.share) {
+    try {
+      await navigator.share({ text });
+      return 'shared';
+    } catch (e) {
+      if (e && e.name === 'AbortError') return 'cancel'; // 사용자가 공유 시트를 닫음
+      // NotAllowedError 등 → 복사로 대체
+    }
+  }
+  return (await copyText(text)) ? 'copied' : 'fail';
+}
+
 export async function copyText(text) {
   try {
     if (navigator.clipboard && window.isSecureContext) {
