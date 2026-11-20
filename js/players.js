@@ -80,7 +80,11 @@ export function parseBulk(text) {
 
 // 붙여넣기 일괄 추가. 성별·급수를 안 적은 사람은 기억된 회원 정보로 채운다.
 export function addBulk(text) {
-  const { entries } = parseBulk(text);
+  return addEntries(parseBulk(text).entries);
+}
+
+// entries: [{name, level, gender, levelGiven}] (캡처 인식 결과도 이 형식으로 추가)
+export function addEntries(entries) {
   const exists = new Set(state.players.map((p) => p.name));
   let added = 0, skipped = 0, defaulted = 0, noGender = 0, recalled = 0;
   for (const e of entries) {
