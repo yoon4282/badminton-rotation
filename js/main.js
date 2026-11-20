@@ -22,6 +22,7 @@ function makeRound(replaceLast) {
   else state.rounds.push(res.round);
   state.tab = 'round';
   commit();
+  window.scrollTo(0, 0); // 새 라운드는 맨 위부터 보이게
 }
 
 async function copy(text, okMsg) {
