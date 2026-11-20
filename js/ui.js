@@ -118,6 +118,7 @@ export function renderRound() {
     ${cur.resting.length ? `<div class="resting">💤 휴식: ${cur.resting.map((id) => { const p = byId(id); return p ? esc(p.name) : '?'; }).join(', ')}</div>` : ''}
     <div class="actions">
       <button type="button" class="btn primary big full" data-action="next-round">다음 라운드 만들기 →</button>
+      <button type="button" class="btn kakao full" data-action="share-round">💬 카톡으로 배정표 공유</button>
       <button type="button" class="btn" data-action="regen">🔀 다시 짜기</button>
       <button type="button" class="btn" data-action="copy-round">📋 배정표 복사</button>
     </div>
@@ -139,7 +140,8 @@ export function renderRank() {
       <td class="nm">${esc(r.player.name)}${lvBadge(r.player.level)}</td>
       <td>${r.games}</td><td>${r.wins}</td><td>${r.losses}</td><td class="rt">${fmtRate(r)}</td></tr>`).join('')}
     </tbody></table>
-    <button type="button" class="btn primary big" data-action="copy-rank">📋 순위표 복사</button>
+    <button type="button" class="btn kakao big" data-action="share-rank">💬 카톡으로 순위표 공유</button>
+    <button type="button" class="btn big" data-action="copy-rank">📋 순위표 복사</button>
   </div>`;
 }
 
