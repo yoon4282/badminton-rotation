@@ -1,12 +1,19 @@
-import { state, load, save, setCourts, resetRounds, resetAll } from './state.js';
+import { state, load, save, setCourts, resetRounds, resetAll, LEVELS, setPersist, snapshot, applySnapshot } from './state.js';
 import { addPlayer, addBulk, addEntries, toggleActive, cycleLevel, cycleGender, removePlayer, hasHistory } from './players.js';
 import { generateRound } from './matcher.js';
 import { renderAll, showTab, toast } from './ui.js';
 import { roundText, rankText, copyText, shareText, roundTextKakao, rankTextKakao } from './share.js';
 import { kakaoEnabled, preloadKakao, sendKakaoText, KAKAO_TEXT_MAX } from './kakao.js';
 import { initInvite } from './invite.js';
-import { rememberAll, lookup } from './roster.js';
+import { rememberAll, lookup, exportMembers, useMembers } from './roster.js';
 import { initOcr } from './ocr.js';
+import { initAdminHost, broadcastState } from './admin.js';
+import { createAdminClient } from './p2p.js';
+
+// ?admin=방ID&key=비밀키 로 열면 부 관리자 화면: 메인 관리자의 상태를 받아 보고, 조작은 메인에 요청한다
+const params = new URLSearchParams(location.search);
+const SUB = params.get('admin') ? { hostId: params.get('admin').trim(), key: params.get('key') || '' } : null;
+let sub = null; // 부 관리자 연결 (SUB 모드에서만)
 
 let newLevel = 'C';
 let newGender = null; // 추가할 때마다 직접 선택하도록 시작은 미선택
@@ -14,17 +21,118 @@ let newGender = null; // 추가할 때마다 직접 선택하도록 시작은 �
 function commit() {
   save();
   renderAll();
+  if (!SUB) broadcastState();
 }
 
-function makeRound(replaceLast) {
-  const base = replaceLast ? state.rounds.slice(0, -1) : state.rounds;
-  const res = generateRound({ players: state.players, rounds: base, courts: state.courts });
-  if (res.error) { toast(res.error); return; }
-  if (replaceLast) state.rounds[state.rounds.length - 1] = res.round;
-  else state.rounds.push(res.round);
-  state.tab = 'round';
+const bulkMsg = ({ added, skipped, defaulted, noGender, recalled }) =>
+  `${added}명 추가` + (recalled ? ` · 기억된 회원 ${recalled}명 자동 입력` : '') + (skipped ? ` · 중복 ${skipped}명 제외` : '') +
+  (defaulted ? ` · 급수 없는 ${defaulted}명은 C` : '') + (noGender ? ` · 성별 미지정 ${noGender}명(목록에서 ?를 눌러 지정)` : '');
+
+const findP = (id) => state.players.find((p) => p.id === id);
+const int = (v) => (Number.isInteger(v) ? v : parseInt(v, 10));
+
+// ───── 상태를 바꾸는 작업 (메인 관리자 기기에서만 실행) ─────
+// 부 관리자가 보낸 값도 들어오므로 모두 검사한다. 반환: {ok:false, msg} 또는 {msg?}
+const ops = {
+  courts: ({ n }) => { setCourts(int(n)); },
+  bulk: ({ text }) => {
+    const r = addBulk(String(text || '').slice(0, 5000));
+    if (!r.added && !r.skipped) return { ok: false, msg: '붙여넣은 내용이 없어요.' };
+    return { msg: bulkMsg(r) };
+  },
+  entries: ({ entries }) => {
+    const list = (Array.isArray(entries) ? entries : []).slice(0, 100).map((e) => ({
+      name: String((e && e.name) || '').trim().slice(0, 12),
+      level: LEVELS.includes(e && e.level) ? e.level : 'C',
+      gender: e && (e.gender === 'M' || e.gender === 'F') ? e.gender : null,
+      levelGiven: !!(e && e.levelGiven),
+    })).filter((e) => e.name);
+    const { added, recalled, noGender } = addEntries(list);
+    return {
+      msg: `${added}명 추가` + (recalled ? ` · 기억된 회원 ${recalled}명 자동 입력` : '') +
+        (noGender ? ` · 처음 온 ${noGender}명은 목록에서 성별(?)·급수를 지정해 주세요` : ''),
+    };
+  },
+  add: ({ name, level, gender }) => {
+    name = String(name || '').trim();
+    if (state.players.some((p) => p.name === name)) return { ok: false, msg: '같은 이름이 이미 있어요.' };
+    const p = addPlayer(name, level, gender);
+    if (!p) return { ok: false, msg: '이름을 입력해 주세요.' };
+    return { msg: `${p.name}(${p.gender === 'M' ? '남' : p.gender === 'F' ? '여' : '?'}·${p.level}) 추가` };
+  },
+  level: ({ id }) => { cycleLevel(int(id)); },
+  gender: ({ id }) => { cycleGender(int(id)); },
+  remove: ({ id }) => {
+    id = int(id);
+    if (hasHistory(id)) return { ok: false, msg: '경기 기록이 있어 삭제할 수 없어요. 스위치로 휴식 처리하세요.' };
+    removePlayer(id);
+  },
+  // 원하는 상태(active)를 보내서, 두 관리자가 동시에 눌러도 뒤집히지 않게
+  toggle: ({ id, active }) => {
+    const p = findP(int(id));
+    if (!p) return { ok: false, msg: '참가자를 찾지 못했어요.' };
+    if (p.active !== !!active) toggleActive(p.id);
+    return { msg: `${p.name}: ${p.active ? '참가' : '휴식'} · 다음 라운드부터 반영돼요` };
+  },
+  // expect: 누른 화면에서 본 라운드 수. 다른 관리자가 먼저 라운드를 만들었으면 거절(라운드 두 번 생성 방지)
+  round: ({ replaceLast, expect }) => {
+    if (int(expect) !== state.rounds.length) return { ok: false, msg: '다른 관리자가 먼저 라운드를 바꿨어요. 화면을 확인해 주세요.' };
+    if (replaceLast && !state.rounds.length) return { ok: false };
+    const base = replaceLast ? state.rounds.slice(0, -1) : state.rounds;
+    const res = generateRound({ players: state.players, rounds: base, courts: state.courts });
+    if (res.error) return { ok: false, msg: res.error };
+    if (replaceLast) state.rounds[state.rounds.length - 1] = res.round;
+    else state.rounds.push(res.round);
+    return { round: true, msg: replaceLast ? '현재 라운드를 다시 짰어요.' : '' };
+  },
+  // key: 누른 화면의 대진(팀 구성). 그사이 '다시 짜기'로 바뀌었으면 거절
+  win: ({ r, m, key, winner }) => {
+    const match = state.rounds[int(r)]?.matches[int(m)];
+    if (!match || matchKey(match) !== key) return { ok: false, msg: '대진이 바뀌었어요. 화면을 확인하고 다시 눌러 주세요.' };
+    match.winner = winner === 'A' || winner === 'B' ? winner : null;
+  },
+  'reset-rounds': () => { resetRounds(); return { tab: 'players', msg: '새 경기를 시작해요.' }; },
+  'reset-all': () => { resetAll(); return { msg: '초기화했어요.' }; },
+};
+const HOST_ONLY = new Set(['reset-rounds', 'reset-all']);
+const matchKey = (m) => [...m.teamA, '|', ...m.teamB].join(',');
+
+function applyOp(op, args) {
+  const f = ops[op];
+  if (!f) return { ok: false, msg: '지원하지 않는 작업이에요.' };
+  let r;
+  try { r = f(args || {}) || {}; } catch (e) { return { ok: false, msg: '처리 중 오류가 났어요.' }; }
+  if (r.ok === false) return r;
+  r.ok = true;
   commit();
-  window.scrollTo(0, 0); // 새 라운드는 맨 위부터 보이게
+  return r;
+}
+
+// 메인이면 바로 실행, 부 관리자면 메인에 요청하고 결과(메시지)만 받는다. 상태는 메인이 보내 주는 snap으로 갱신된다.
+async function run(op, args = {}) {
+  let res;
+  if (!SUB) res = applyOp(op, args);
+  else {
+    try { res = await sub.send(op, args); } catch (e) {
+      toast('메인 관리자와 연결이 끊겨 반영되지 않았어요. 연결되면 다시 눌러 주세요.');
+      renderAll(); // 바꿔 둔 스위치 등을 원래대로
+      return null;
+    }
+    if (res.error && !res.msg) res.msg = res.error;
+  }
+  if (res.ok && res.tab) state.tab = res.tab;
+  if (res.ok && res.round) { state.tab = 'round'; renderAll(); window.scrollTo(0, 0); } // 새 라운드는 맨 위부터
+  else if (SUB) renderAll();
+  if (res.msg) toast(res.msg);
+  return res;
+}
+
+// 메인 관리자가 부 관리자의 요청을 받았을 때
+function handleSubOp(op, args) {
+  if (HOST_ONLY.has(op)) return { ok: false, error: '이 작업은 메인 관리자만 할 수 있어요.' };
+  const r = applyOp(op, args);
+  if (r.ok && r.msg) toast('👥 ' + r.msg);
+  return { ok: r.ok, msg: r.msg || '', round: !!r.round };
 }
 
 async function copy(text, okMsg) {
@@ -48,49 +156,46 @@ async function share(text, kakaoText, what) {
 }
 
 const actions = {
-  'court-inc': () => { setCourts(state.courts + 1); commit(); },
-  'court-dec': () => { setCourts(state.courts - 1); commit(); },
+  'court-inc': () => run('courts', { n: state.courts + 1 }),
+  'court-dec': () => run('courts', { n: state.courts - 1 }),
 
-  'bulk-add': () => {
+  'bulk-add': async () => {
     const ta = document.getElementById('bulk-input');
-    const { added, skipped, defaulted, noGender, recalled } = addBulk(ta.value);
-    if (!added && !skipped) { toast('붙여넣은 내용이 없어요.'); return; }
-    ta.value = '';
-    toast(`${added}명 추가` + (recalled ? ` · 기억된 회원 ${recalled}명 자동 입력` : '') + (skipped ? ` · 중복 ${skipped}명 제외` : '') + (defaulted ? ` · 급수 없는 ${defaulted}명은 C` : '') +
-      (noGender ? ` · 성별 미지정 ${noGender}명(목록에서 ?를 눌러 지정)` : ''));
-    commit();
+    if (!ta.value.trim()) { toast('붙여넣은 내용이 없어요.'); return; }
+    const res = await run('bulk', { text: ta.value });
+    if (res && res.ok) ta.value = '';
   },
 
-  'cycle-level': (el) => { cycleLevel(+el.dataset.id); commit(); },
-  'cycle-gender': (el) => { cycleGender(+el.dataset.id); commit(); },
+  'cycle-level': (el) => run('level', { id: +el.dataset.id }),
+  'cycle-gender': (el) => run('gender', { id: +el.dataset.id }),
 
   remove: (el) => {
     const id = +el.dataset.id;
     if (hasHistory(id)) { toast('경기 기록이 있어 삭제할 수 없어요. 스위치로 휴식 처리하세요.'); return; }
-    if (confirm('이 참가자를 삭제할까요?')) { removePlayer(id); commit(); }
+    if (confirm('이 참가자를 삭제할까요?')) run('remove', { id });
   },
 
-  'gen-round': () => makeRound(false),
+  'gen-round': () => run('round', { expect: state.rounds.length }),
 
   'next-round': () => {
     const cur = state.rounds[state.rounds.length - 1];
     if (cur && cur.matches.some((m) => !m.winner) && !confirm('결과가 입력되지 않은 코트가 있어요. 그래도 다음 라운드로 갈까요?')) return;
-    makeRound(false);
+    run('round', { expect: state.rounds.length });
   },
 
   regen: () => {
     const cur = state.rounds[state.rounds.length - 1];
     if (!cur) return;
     if (cur.matches.some((m) => m.winner) && !confirm('입력한 결과가 지워져요. 다시 짤까요?')) return;
-    makeRound(true);
-    toast('현재 라운드를 다시 짰어요.');
+    run('round', { replaceLast: true, expect: state.rounds.length });
   },
 
   win: (el) => {
-    const m = state.rounds[+el.dataset.r]?.matches[+el.dataset.m];
+    const r = +el.dataset.r, mi = +el.dataset.m;
+    const m = state.rounds[r]?.matches[mi];
     if (!m) return;
-    m.winner = m.winner === el.dataset.team ? null : el.dataset.team; // 같은 버튼 다시 누르면 취소
-    commit();
+    // 같은 버튼 다시 누르면 취소
+    run('win', { r, m: mi, key: matchKey(m), winner: m.winner === el.dataset.team ? null : el.dataset.team });
   },
 
   'copy-round': () => copy(roundText(), '배정표를 복사했어요. 카톡에 붙여넣기 하세요!'),
@@ -99,10 +204,12 @@ const actions = {
   'share-rank': () => share(rankText(), rankTextKakao(KAKAO_TEXT_MAX), '순위표'),
 
   'reset-rounds': () => {
-    if (confirm('라운드와 승패 기록을 모두 지울까요? (참가자 명단은 유지)')) { resetRounds(); state.tab = 'players'; commit(); toast('새 경기를 시작해요.'); }
+    if (SUB) { toast('새 경기 시작은 메인 관리자만 할 수 있어요.'); return; }
+    if (confirm('라운드와 승패 기록을 모두 지울까요? (참가자 명단은 유지)')) run('reset-rounds');
   },
   'reset-all': () => {
-    if (confirm('명단과 기록을 전부 삭제할까요?')) { resetAll(); commit(); toast('초기화했어요.'); }
+    if (SUB) { toast('전체 초기화는 메인 관리자만 할 수 있어요.'); return; }
+    if (confirm('명단과 기록을 전부 삭제할까요?')) run('reset-all');
   },
 };
 
@@ -130,11 +237,7 @@ document.addEventListener('click', (e) => {
 
 document.addEventListener('change', (e) => {
   const el = e.target;
-  if (el.dataset && el.dataset.action === 'toggle') {
-    const p = toggleActive(+el.dataset.id);
-    commit();
-    if (p) toast(`${p.name}: ${p.active ? '참가' : '휴식'} · 다음 라운드부터 반영돼요`);
-  }
+  if (el.dataset && el.dataset.action === 'toggle') run('toggle', { id: +el.dataset.id, active: el.checked });
 });
 
 function selectSeg(segId, attr, value) {
@@ -149,16 +252,14 @@ document.getElementById('name-input').addEventListener('input', (e) => {
   if (mem.level) { newLevel = mem.level; selectSeg('level-seg', 'level', mem.level); }
 });
 
-document.getElementById('add-form').addEventListener('submit', (e) => {
+document.getElementById('add-form').addEventListener('submit', async (e) => {
   e.preventDefault();
   const input = document.getElementById('name-input');
   if (!newGender) { toast('성별(남/여)을 먼저 선택해 주세요.'); return; }
-  const p = addPlayer(input.value, newLevel, newGender);
-  if (!p) return;
+  const res = await run('add', { name: input.value, level: newLevel, gender: newGender });
+  if (!res || !res.ok) return;
   input.value = '';
   input.focus();
-  commit();
-  toast(`${p.name}(${p.gender === 'M' ? '남' : '여'}·${p.level}) 추가`);
 });
 
 // QR 초대: 참가자가 보낸 정보를 명단에 추가. addPlayer는 joinedRound=현재 라운드 수, 경기 0회로 등록되고
@@ -175,16 +276,60 @@ function handleRemoteJoin({ name, level, gender }) {
   return { ok: true, name: p.name, level: p.level };
 }
 
-load();
-rememberAll(state.players); // 이미 있는 명단도 회원으로 기억
-renderAll();
-initInvite({ onJoin: handleRemoteJoin, toast, copyText });
-initOcr({
-  onAdd: (entries) => {
-    const { added, recalled, noGender } = addEntries(entries);
-    commit();
-    toast(`${added}명 추가` + (recalled ? ` · 기억된 회원 ${recalled}명 자동 입력` : '') +
-      (noGender ? ` · 처음 온 ${noGender}명은 목록에서 성별(?)·급수를 지정해 주세요` : ''));
-  },
-});
+// ───── 부 관리자 화면 ─────
+const LINK_TEXT = {
+  connecting: '⏳ 메인 관리자에 연결 중…',
+  reconnecting: '🔄 다시 연결 중… (메인 관리자 화면이 열려 있어야 해요)',
+  ready: '👥 부 관리자 · 연결됨',
+};
+function setLinkStatus(s) {
+  const b = document.getElementById('link-badge');
+  b.hidden = false;
+  b.textContent = LINK_TEXT[s] || s;
+  b.dataset.state = s;
+  document.body.classList.toggle('sub-offline', s !== 'ready');
+}
+
+function startSub() {
+  setPersist(false); // 이 기기의 저장 데이터(자기 모임 기록)는 건드리지 않는다
+  document.body.classList.add('sub');
+  state.players = []; state.rounds = [];
+  renderAll();
+  setLinkStatus('connecting');
+  let first = true;
+  sub = createAdminClient(SUB.hostId, SUB.key, {
+    onSnap: (s, full) => {
+      if (s && s.members) useMembers(s.members);
+      applySnapshot(s);
+      renderAll();
+      if (first && full) { first = false; toast('메인 관리자 화면과 연결됐어요.'); }
+    },
+    onStatus: setLinkStatus,
+    onDenied: () => {
+      const b = document.getElementById('link-badge');
+      b.hidden = false;
+      b.dataset.state = 'error';
+      b.textContent = '⛔ 링크가 만료됐어요';
+      document.body.classList.add('sub-offline');
+      alert('부 관리자 링크가 바뀌었거나 올바르지 않아요.\n메인 관리자에게 새 링크를 받아 주세요.');
+    },
+  });
+}
+
+if (SUB) {
+  startSub();
+  initInvite({ onJoin: null, toast, copyText, fixedId: SUB.hostId }); // 참가자 QR은 메인 관리자 방으로
+} else {
+  load();
+  rememberAll(state.players); // 이미 있는 명단도 회원으로 기억
+  renderAll();
+  initInvite({ onJoin: handleRemoteJoin, toast, copyText });
+  initAdminHost({
+    toast, copyText,
+    onOp: handleSubOp,
+    snapshot: () => ({ ...snapshot(), members: exportMembers() }),
+    onJoin: handleRemoteJoin,
+  });
+}
+initOcr({ onAdd: (entries) => run('entries', { entries }) });
 preloadKakao().catch(() => { /* SDK 로드 실패 시 공유 창/복사로 대체 */ });

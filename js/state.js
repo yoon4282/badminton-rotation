@@ -36,7 +36,24 @@ export function load() {
   }
 }
 
+// 부 관리자 화면은 메인 관리자의 상태를 받아 보여만 주므로 이 기기에 저장하지 않는다
+let persist = true;
+export function setPersist(on) { persist = on; }
+
+// 메인 → 부 관리자로 보내는 상태 (탭 위치는 기기마다 따로)
+export function snapshot() {
+  return { courts: state.courts, nextId: state.nextId, players: state.players, rounds: state.rounds };
+}
+export function applySnapshot(s) {
+  if (!s || typeof s !== 'object') return;
+  state.courts = clampCourts(s.courts);
+  state.players = Array.isArray(s.players) ? s.players : [];
+  state.rounds = Array.isArray(s.rounds) ? s.rounds : [];
+  state.nextId = Number.isInteger(s.nextId) ? s.nextId : 1;
+}
+
 export function save() {
+  if (!persist) return;
   try {
     localStorage.setItem(KEY, JSON.stringify(state));
   } catch (e) {

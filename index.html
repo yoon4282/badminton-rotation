@@ -51,6 +51,23 @@
     </div>
   </div>
 
+  <!-- 부 관리자 초대 모달 (메인 관리자 화면) -->
+  <div id="admin-modal" class="modal" role="dialog" aria-modal="true" aria-labelledby="admin-title" hidden>
+    <div class="modal-card">
+      <h2 id="admin-title">부 관리자 초대</h2>
+      <p class="hint">함께 운영할 사람이 이 QR을 찍거나 링크를 열면, 같은 명단·대진을 보면서 결과 입력·참가자 추가·다음 라운드를 할 수 있어요. <strong>운영진에게만 보내 주세요.</strong></p>
+      <p id="admin-status" class="qr-status"></p>
+      <div id="admin-box" class="qr-box"></div>
+      <input id="admin-url" type="text" readonly hidden aria-label="부 관리자 링크">
+      <p id="admin-count" class="hint"></p>
+      <p class="hint">기록은 이 기기에 저장돼요. 이 화면(탭)이 열려 있어야 부 관리자가 쓸 수 있고, 전체 초기화·새 경기 시작은 메인 관리자만 할 수 있어요.</p>
+      <button type="button" id="admin-copy" class="btn big" disabled>🔗 부 관리자 링크 복사</button>
+      <button type="button" id="admin-retry" class="btn big" hidden>다시 연결</button>
+      <button type="button" id="admin-renew" class="btn big">🔒 링크 새로 만들기 (기존 부 관리자 끊기)</button>
+      <button type="button" id="admin-close" class="btn primary big">닫기 (연결은 유지돼요)</button>
+    </div>
+  </div>
+
   <!-- 투표 캡처 인식 모달 (운영진 화면) -->
   <div id="ocr-modal" class="modal" role="dialog" aria-modal="true" aria-labelledby="ocr-title" hidden>
     <div class="modal-card">
@@ -68,6 +85,7 @@
 
   <header class="topbar">
     <h1>🏸 배드민턴 대진표</h1>
+    <span id="link-badge" class="badge link" hidden></span>
     <span id="round-badge" class="badge" hidden></span>
   </header>
 
@@ -106,6 +124,7 @@
         </form>
         <button type="button" id="qr-open" class="btn big">📱 QR 초대 코드 열기</button>
         <button type="button" id="ocr-open" class="btn big">📷 투표 캡처로 추가</button>
+        <button type="button" id="admin-open" class="btn big host-only">👥 부 관리자 초대</button>
         <details class="bulk">
           <summary>여러 명 한 번에 붙여넣기 (카톡 투표 참여자)</summary>
           <textarea id="bulk-input" rows="6" placeholder="카톡 투표 참여자 이름만 적어도 돼요&#10;김철수, 이영희, 박민수&#10;&#10;처음 오는 사람은 성별·급수도&#10;최지우 여 초심"></textarea>
@@ -123,7 +142,7 @@
         <p class="hint">급수 글자를 누르면 바뀌고, 스위치로 휴식·조기귀가를 켜고 끌 수 있어요. 변경은 다음 라운드(또는 ‘다시 짜기’)부터 반영돼요.</p>
       </div>
 
-      <div class="card">
+      <div class="card host-only">
         <div class="row gap">
           <button type="button" class="btn grow" data-action="reset-rounds">새 경기 시작<br><small>명단 유지·기록 삭제</small></button>
           <button type="button" class="btn danger grow" data-action="reset-all">전체 초기화</button>

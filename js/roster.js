@@ -48,6 +48,10 @@ export function memberCount() {
   return Object.keys(read()).length;
 }
 
+// 부 관리자 화면: 메인 관리자의 회원 기억을 받아 메모리에만 둔다(이 기기에는 저장하지 않음)
+export function exportMembers() { return read(); }
+export function useMembers(obj) { if (obj && typeof obj === 'object') cache = obj; }
+
 export function clearMembers() {
   cache = {};
   write();

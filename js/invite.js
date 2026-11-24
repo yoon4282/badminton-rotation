@@ -24,8 +24,9 @@ function joinUrl(id) {
   return location.origin + location.pathname + '?join=' + encodeURIComponent(id);
 }
 
-async function renderQr(url) {
-  const box = $('qr-box');
+let fixedIdRef = null; // 부 관리자 화면: 내 연결 없이 메인 관리자 방의 QR을 보여 준다
+
+export async function renderQr(url, box = $('qr-box')) {
   box.innerHTML = '';
   try {
     const QRCode = await loadLib('qrcode', QR_URLS, 'QRCode');
@@ -34,6 +35,8 @@ async function renderQr(url) {
     box.innerHTML = '<p class="hint">QR 이미지를 불러오지 못했어요.<br>아래 링크를 복사해서 공유해 주세요.</p>';
   }
 }
+
+const qrStatus = (s) => { if (!$('qr-modal').hidden) setStatus(s); };
 
 async function connect() {
   $('qr-box').innerHTML = '';
@@ -47,7 +50,7 @@ async function connect() {
         if (res && res.ok) { joinedCount++; $('qr-count').textContent = `이번에 합류한 사람 ${joinedCount}명`; }
         return res;
       },
-      onStatus: (s) => { if (!$('qr-modal').hidden) setStatus(s); },
+      onStatus: qrStatus,
     });
     currentUrl = joinUrl(id);
     $('qr-url').value = currentUrl;
@@ -64,13 +67,13 @@ function open() {
   $('qr-modal').hidden = false;
   document.body.classList.add('modal-open');
   // 이미 연결돼 있으면 같은 방 ID/QR을 그대로 다시 보여준다
-  const id = hostId();
+  const id = fixedIdRef || hostId();
   if (id) {
     currentUrl = joinUrl(id);
     $('qr-url').value = currentUrl;
     $('qr-url').hidden = false;
     $('qr-copy').disabled = false;
-    setStatus('ready');
+    setStatus(fixedIdRef ? '✅ 참가자가 QR을 찍으면 메인 관리자 명단에 바로 추가돼요' : 'ready');
     renderQr(currentUrl);
   } else {
     connect();
@@ -82,8 +85,9 @@ function close() {
   document.body.classList.remove('modal-open');
 }
 
-export function initInvite({ onJoin, toast, copyText }) {
+export function initInvite({ onJoin, toast, copyText, fixedId = null }) {
   onJoinRef = onJoin;
+  fixedIdRef = fixedId;
   $('qr-open').addEventListener('click', open);
   $('qr-close').addEventListener('click', close);
   $('qr-retry').addEventListener('click', connect);

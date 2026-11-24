@@ -53,9 +53,64 @@ function waitOpen(peer, ms) {
 // ───────── 방장(호스트) ─────────
 const host = { peer: null, starting: null };
 const replies = new Map(); // reqId → 응답 (재전송 시 중복 등록 방지)
-let handlers = { onJoin: null, onStatus: null };
+// onJoin: 참가자 등록 / onOp·checkAdmin·snapshot·onAdmins: 부 관리자 연동
+const handlers = { onJoin: null, onOp: null, checkAdmin: null, snapshot: null, onAdmins: null };
+const statusListeners = new Set();
+const admins = new Set(); // 인증된 부 관리자 연결
+let lastStatus = null;
 
-function status(s) { if (handlers.onStatus) handlers.onStatus(s); }
+function status(s) { lastStatus = s; statusListeners.forEach((f) => { try { f(s); } catch (e) { /* 무시 */ } }); }
+const notifyAdmins = () => { if (handlers.onAdmins) handlers.onAdmins(admins.size); };
+
+export function adminCount() { return admins.size; }
+
+// 메인 상태가 바뀔 때마다 부 관리자 화면에 전체 상태를 보낸다
+export function broadcastAdmins(msg) {
+  for (const c of admins) {
+    if (!c.open) { admins.delete(c); continue; }
+    try { c.send(msg); } catch (e) { /* 무시 */ }
+  }
+}
+
+// 링크를 새로 만들면 기존 부 관리자는 끊는다
+export function kickAdmins() {
+  for (const c of admins) {
+    try { c.send({ type: 'denied' }); } catch (e) { /* 무시 */ }
+    setTimeout(() => { try { c.close(); } catch (e) { /* 무시 */ } }, 500);
+  }
+  admins.clear();
+  notifyAdmins();
+}
+
+function handleAdmin(conn, msg) {
+  if (msg.type === 'admin-hello') {
+    if (!handlers.checkAdmin || !handlers.checkAdmin(msg.key)) {
+      conn.send({ type: 'denied' });
+      setTimeout(() => { try { conn.close(); } catch (e) { /* 무시 */ } }, 500);
+      return;
+    }
+    if (!admins.has(conn)) {
+      admins.add(conn);
+      const drop = () => { if (admins.delete(conn)) notifyAdmins(); };
+      conn.on('close', drop);
+      conn.on('error', drop);
+    }
+    conn.send({ type: 'snap', s: handlers.snapshot(), full: true });
+    notifyAdmins();
+    return;
+  }
+  // msg.type === 'op'
+  const reqId = msg.reqId;
+  if (typeof reqId !== 'string' || reqId.length > 64) return;
+  if (!admins.has(conn)) { conn.send({ type: 'ack', reqId, ok: false, error: '부 관리자 권한이 없어요.' }); return; }
+  if (replies.has(reqId)) { conn.send(replies.get(reqId)); return; }
+  let res;
+  try { res = handlers.onOp(String(msg.op || ''), msg.args && typeof msg.args === 'object' ? msg.args : {}); } catch (e) { res = { ok: false, error: '처리 중 오류가 났어요.' }; }
+  const reply = { type: 'ack', reqId, ...res };
+  replies.set(reqId, reply);
+  if (replies.size > 300) replies.delete(replies.keys().next().value);
+  conn.send(reply);
+}
 
 function validate(msg) {
   if (!msg || msg.type !== 'join' || typeof msg.reqId !== 'string' || msg.reqId.length > 64) return null;
@@ -69,6 +124,8 @@ function validate(msg) {
 }
 
 function handleData(conn, msg) {
+  if (msg && (msg.type === 'admin-hello' || msg.type === 'op')) { handleAdmin(conn, msg); return; }
+  if (!handlers.onJoin) return;
   const reqId = msg && msg.reqId;
   if (typeof reqId === 'string' && replies.has(reqId)) { conn.send(replies.get(reqId)); return; }
   const v = validate(msg);
@@ -103,8 +160,9 @@ function createPeer(id) {
 }
 
 // 이미 열려 있으면 같은 방 ID를 재사용, 끊겼으면 재연결, 죽었으면 새로 생성
-export function startHost(h) {
-  handlers = h;
+export function startHost(h = {}) {
+  for (const k of Object.keys(handlers)) if (h[k]) handlers[k] = h[k];
+  if (h.onStatus) { statusListeners.add(h.onStatus); }
   if (host.peer && !host.peer.destroyed) {
     if (host.peer.open) { status('ready'); return Promise.resolve(host.peer.id); }
     if (host.peer.disconnected) { try { host.peer.reconnect(); } catch (e) { /* 아래 대기에서 처리 */ } }
@@ -114,14 +172,15 @@ export function startHost(h) {
     await loadLib('peerjs', PEERJS_URLS, 'Peer');
     if (host.peer && !host.peer.destroyed && !host.peer.open) { try { host.peer.destroy(); } catch (e) { /* 무시 */ } }
     let saved = null;
-    try { saved = sessionStorage.getItem(ROOM_KEY); } catch (e) { /* 무시 */ }
+    // 창을 닫았다 열어도 같은 방 ID → 부 관리자 링크·QR이 그대로 유효
+    try { saved = localStorage.getItem(ROOM_KEY) || sessionStorage.getItem(ROOM_KEY); } catch (e) { /* 무시 */ }
     for (const tryId of [saved, null]) {
       if (host.peer && host.peer.destroyed === false && host.peer.open) break;
       const peer = createPeer(tryId);
       try {
         const id = await waitOpen(peer, 12000);
         host.peer = peer;
-        try { sessionStorage.setItem(ROOM_KEY, id); } catch (e) { /* 무시 */ }
+        try { localStorage.setItem(ROOM_KEY, id); } catch (e) { /* 무시 */ }
         return id;
       } catch (e) {
         try { peer.destroy(); } catch (e2) { /* 무시 */ }
@@ -134,6 +193,90 @@ export function startHost(h) {
 }
 
 export const hostId = () => (host.peer && host.peer.open ? host.peer.id : null);
+export const hostStatus = () => lastStatus;
+
+// ───────── 부 관리자(메인 관리자 화면에 붙어 같은 상태를 보고 조작) ─────────
+// 메인 관리자가 상태의 주인이다. 부 관리자는 조작 요청(op)만 보내고, 메인이 반영한 전체 상태(snap)를 받아 그린다.
+export function createAdminClient(hostPeerId, key, { onSnap, onStatus, onDenied }) {
+  let peer = null, conn = null, stopped = false, timer = null, connecting = false;
+  const pending = new Map(); // reqId → {resolve, reject, t}
+
+  const schedule = (ms = 3000) => { clearTimeout(timer); if (!stopped) timer = setTimeout(connect, ms); };
+
+  function lost(c) {
+    if (conn !== c) return;
+    conn = null;
+    for (const [, p] of pending) { clearTimeout(p.t); p.reject(new Error('offline')); }
+    pending.clear();
+    if (stopped) return;
+    onStatus('reconnecting');
+    schedule();
+  }
+
+  function onData(msg) {
+    if (!msg) return;
+    if (msg.type === 'snap') { onSnap(msg.s, !!msg.full); onStatus('ready'); }
+    else if (msg.type === 'ack') {
+      const p = pending.get(msg.reqId);
+      if (p) { clearTimeout(p.t); pending.delete(msg.reqId); p.resolve(msg); }
+    } else if (msg.type === 'denied') {
+      stopped = true;
+      clearTimeout(timer);
+      onDenied();
+    }
+  }
+
+  async function connect() {
+    if (stopped || connecting || (conn && conn.open)) return;
+    connecting = true;
+    onStatus(conn === null && !peer ? 'connecting' : 'reconnecting');
+    try {
+      await loadLib('peerjs', PEERJS_URLS, 'Peer');
+      if (!peer || peer.destroyed) {
+        peer = new window.Peer();
+        peer.on('disconnected', () => { if (!peer.destroyed) { try { peer.reconnect(); } catch (e) { /* 무시 */ } } });
+      }
+      await waitOpen(peer, 12000);
+      const c = peer.connect(hostPeerId, { reliable: true });
+      await new Promise((resolve, reject) => {
+        const done = (fn, v) => { clearTimeout(t); peer.off('error', onErr); fn(v); };
+        const onErr = (e) => done(reject, e);
+        const t = setTimeout(() => { try { c.close(); } catch (e) { /* 무시 */ } done(reject, new Error('timeout')); }, 10000);
+        c.on('open', () => done(resolve));
+        c.on('error', onErr);
+        peer.on('error', onErr);
+      });
+      conn = c;
+      c.on('data', onData);
+      c.on('close', () => lost(c));
+      c.on('error', () => lost(c));
+      c.send({ type: 'admin-hello', key });
+    } catch (e) {
+      if (!stopped) { onStatus('reconnecting'); schedule(); }
+    } finally {
+      connecting = false;
+    }
+  }
+
+  // 휴대폰 화면이 꺼졌다 켜지면 끊겨 있는 경우가 많아 바로 다시 붙는다
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible' && !(conn && conn.open)) { clearTimeout(timer); connect(); }
+  });
+
+  function send(op, args) {
+    const c = conn;
+    if (!c || !c.open) return Promise.reject(new Error('offline'));
+    const reqId = Math.random().toString(36).slice(2) + Date.now().toString(36);
+    return new Promise((resolve, reject) => {
+      const t = setTimeout(() => { pending.delete(reqId); reject(new Error('timeout')); lost(c); }, 10000);
+      pending.set(reqId, { resolve, reject, t });
+      try { c.send({ type: 'op', reqId, op, args }); } catch (e) { clearTimeout(t); pending.delete(reqId); reject(e); }
+    });
+  }
+
+  connect();
+  return { send, isOpen: () => !!(conn && conn.open) };
+}
 
 // ───────── 참가자(게스트) ─────────
 export function createGuest(hostPeerId) {
