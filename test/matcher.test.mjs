@@ -132,6 +132,27 @@ assert.ok(generateRound({ players: mk(3), rounds: [], courts: 2 }).error);
   assert.ok(missing / SEEDS < 1, '여복이 너무 적게 잡힘');
 }
 
+// 8-2) 남복 vs 여복은 어떤 인원 구성에서도 나오지 않음 (여복 vs 혼복 같은 '기타'는 허용)
+{
+  const { isMenVsWomen } = await import('../js/matcher.js');
+  let games = 0, other = 0;
+  for (let men = 0; men <= 14; men++) for (const women of [2, 3, 5, 6, 7, 9]) {
+    for (let s = 0; s < 3; s++) {
+      const players = Array.from({ length: men + women }, (_, i) => ({ id: i + 1, name: 'P' + i, level: LEVELS[(i * 7 + s) % 5], gender: i < men ? 'M' : 'F', active: true }));
+      if (players.length < 4) continue;
+      const gender = new Map(players.map((p) => [p.id, p.gender]));
+      const rounds = [];
+      play(players, rounds, 4, 5);
+      for (const r of rounds) for (const m of r.matches) {
+        games++;
+        if (m.type === '기타') other++;
+        assert.ok(!isMenVsWomen(m.teamA, m.teamB, gender), `남복 vs 여복 발생: 남${men} 여${women}`);
+      }
+    }
+  }
+  console.log(`[8-2] ${games}경기 중 남복 vs 여복 0 · 기타(허용된 불균형) ${other}`);
+}
+
 // 9) 카톡 투표 참여자 옮겨 적기: 한 줄에 여러 명 + 표시가 섞인 경우
 {
   const pick = (t) => parseBulk(t).entries.map((e) => `${e.name}:${e.gender}:${e.levelGiven ? e.level : '-'}`);

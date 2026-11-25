@@ -8,7 +8,7 @@ export const WEIGHTS = {
   teamDiff: 6,   // 두 팀 급수 점수 합 차이
   spread: 1,     // 한 코트 내 급수 편차
   sameGroup: 4,  // 직전 라운드와 같은 4명이 다시 한 코트
-  uneven: 30,    // 성별 구성이 다른 두 팀 (예: 남복 vs 혼복, 남복 vs 여복)
+  uneven: 30,    // 성별 구성이 다른 두 팀 (예: 여복 vs 혼복, 남복 vs 혼복). 남복 vs 여복은 아예 만들지 않음
   typeRepeat: 2, // 개인별 유형 비율이 목표(남자 남복:혼복=3:1, 여자 여복:혼복=2:1)보다 한쪽에 쏠린 정도 (1명당)
   ratio: 10,     // 전체 경기 유형 비율이 TYPE_RATIO에서 벗어난 정도 (목표 경기 수와의 차이 합)
 };
@@ -23,6 +23,12 @@ export function matchType(teamA, teamB, gender) {
   const kb = teamKind(gender.get(teamB[0]), gender.get(teamB[1]));
   if (!ka || !kb) return null;
   return ka === kb ? TYPE_LABEL[ka] : '기타';
+}
+// 한 팀은 남남, 다른 팀은 여여인 경기 (금지)
+export function isMenVsWomen(teamA, teamB, gender) {
+  const ka = teamKind(gender.get(teamA[0]), gender.get(teamA[1]));
+  const kb = teamKind(gender.get(teamB[0]), gender.get(teamB[1]));
+  return (ka === 'M' && kb === 'F') || (ka === 'F' && kb === 'M');
 }
 const RESTARTS = 40;
 
@@ -87,6 +93,8 @@ function bestSplit(g, ctx) {
               cnt(ctx.opp, g[j], g[k]) + cnt(ctx.opp, g[j], g[l]);
     const diff = Math.abs(sc[i] + sc[j] - sc[k] - sc[l]);
     const a = [g[i], g[j]], b = [g[k], g[l]];
+    // 남복 vs 여복은 절대 만들지 않는다. 남2·여2 그룹이면 혼복 vs 혼복 분할이 항상 있어 대신 그쪽을 고른다.
+    if (isMenVsWomen(a, b, ctx.gender)) continue;
     const type = matchType(a, b, ctx.gender);
     let gpen = 0;
     if (type === '기타') gpen += W.uneven;
