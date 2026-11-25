@@ -1,5 +1,9 @@
 // PeerJS 연결 (CDN 지연/실패해도 앱 본체가 영향받지 않도록 필요할 때만 동적 로드)
 import { LEVELS } from './state.js';
+import { ICE_SERVERS } from './config.js';
+
+// 직접 연결이 막히면 TURN 중계 서버를 거친다 (config.js)
+const PEER_OPTS = ICE_SERVERS.length ? { config: { iceServers: ICE_SERVERS } } : {};
 
 export const PEERJS_URLS = [
   'https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js',
@@ -143,7 +147,7 @@ function handleData(conn, msg) {
 }
 
 function createPeer(id) {
-  const peer = id ? new window.Peer(id) : new window.Peer();
+  const peer = id ? new window.Peer(id, PEER_OPTS) : new window.Peer(PEER_OPTS);
   peer.on('connection', (conn) => {
     conn.on('data', (msg) => { try { handleData(conn, msg); } catch (e) { /* 무시 */ } });
   });
@@ -233,7 +237,7 @@ export function createAdminClient(hostPeerId, key, { onSnap, onStatus, onDenied 
     try {
       await loadLib('peerjs', PEERJS_URLS, 'Peer');
       if (!peer || peer.destroyed) {
-        peer = new window.Peer();
+        peer = new window.Peer(PEER_OPTS);
         peer.on('disconnected', () => { if (!peer.destroyed) { try { peer.reconnect(); } catch (e) { /* 무시 */ } } });
       }
       await waitOpen(peer, 12000);
@@ -286,7 +290,7 @@ export function createGuest(hostPeerId) {
     if (conn && conn.open) return conn;
     await loadLib('peerjs', PEERJS_URLS, 'Peer');
     if (!peer || peer.destroyed) {
-      peer = new window.Peer();
+      peer = new window.Peer(PEER_OPTS);
       await waitOpen(peer, 12000);
     }
     return new Promise((resolve, reject) => {
