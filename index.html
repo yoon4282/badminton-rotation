@@ -92,6 +92,8 @@
   <main>
     <!-- 참가자 탭 -->
     <section id="tab-players" class="tab">
+      <!-- 넓은 화면: 왼쪽(코트 수·추가) / 오른쪽(참가자 목록·초기화) 두 칸. 휴대폰에서는 위에서 아래로 그대로 -->
+      <div class="pcol">
       <div class="card">
         <div class="row between">
           <div>
@@ -132,7 +134,9 @@
           <p class="hint">한 번 등록한 사람은 성별·급수를 기억해 두었다가 다음에 <strong>이름만 적어도</strong> 자동으로 채워요. 이름은 줄바꿈·쉼표·띄어쓰기로 구분하고, 처음 오는 사람은 이름 뒤에 ‘남/여’와 급수를 적어 주세요(생략하면 급수 C·성별 미지정). 이미 있는 이름은 건너뜁니다.</p>
         </details>
       </div>
+      </div>
 
+      <div class="pcol">
       <div class="card">
         <div class="row between">
           <strong>참가자</strong>
@@ -147,6 +151,7 @@
           <button type="button" class="btn grow" data-action="reset-rounds">새 경기 시작<br><small>명단 유지·기록 삭제</small></button>
           <button type="button" class="btn danger grow" data-action="reset-all">전체 초기화</button>
         </div>
+      </div>
       </div>
     </section>
 

@@ -235,11 +235,8 @@ body.modal-open { overflow: hidden; }
   .topbar h1 { font-size: 20px; }
 
   /* 참가자 탭: 왼쪽은 코트 수·추가·초기화, 오른쪽은 참가자 목록 */
+  /* 왼쪽 칸(.pcol 1)과 오른쪽 칸(.pcol 2)이 각자 위에서부터 쌓여 서로 높이에 영향을 주지 않는다 */
   #tab-players { display: grid; grid-template-columns: minmax(320px, 380px) 1fr; column-gap: 16px; align-items: start; }
-  #tab-players > .card { grid-column: 1; }
-  /* 목록이 길어져도 왼쪽 카드 사이가 벌어지지 않게, 남는 높이는 빈 4번째 줄이 받는다 */
-  #tab-players { grid-template-rows: auto auto auto 1fr; }
-  #tab-players > .card:nth-child(3) { grid-column: 2; grid-row: 1 / span 4; }
 
   /* 대진: 코트 카드를 나란히 (코트 수에 맞춰 빈칸 없이: 4코트는 2×2) */
   .mgrid { display: grid; grid-template-columns: repeat(2, 1fr); column-gap: 12px; }
