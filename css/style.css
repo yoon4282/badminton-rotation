@@ -226,3 +226,38 @@ body.modal-open { overflow: hidden; }
   .teams { grid-template-columns: 1fr; }
   .vs { text-align: center; }
 }
+
+/* ───── 패드·노트북: 넓은 화면에서는 휴대폰 폭에 가두지 않고 넓게 쓴다 ───── */
+@media (min-width: 768px) {
+  body, .tabbar { max-width: 1000px; }
+  main { padding: 16px 20px; }
+  .topbar { padding: 14px 20px; }
+  .topbar h1 { font-size: 20px; }
+
+  /* 참가자 탭: 왼쪽은 코트 수·추가·초기화, 오른쪽은 참가자 목록 */
+  #tab-players { display: grid; grid-template-columns: minmax(320px, 380px) 1fr; column-gap: 16px; align-items: start; }
+  #tab-players > .card { grid-column: 1; }
+  /* 목록이 길어져도 왼쪽 카드 사이가 벌어지지 않게, 남는 높이는 빈 4번째 줄이 받는다 */
+  #tab-players { grid-template-rows: auto auto auto 1fr; }
+  #tab-players > .card:nth-child(3) { grid-column: 2; grid-row: 1 / span 4; }
+
+  /* 대진: 코트 카드를 나란히 (코트 수에 맞춰 빈칸 없이: 4코트는 2×2) */
+  .mgrid { display: grid; grid-template-columns: repeat(2, 1fr); column-gap: 12px; }
+  .mgrid[data-n="1"] { grid-template-columns: minmax(0, 560px); }
+  .actions { grid-template-columns: 2fr 2fr 1fr 1fr; }
+  .actions .full { grid-column: auto; }
+
+  /* 순위표·참가자 등록 화면은 너무 퍼지지 않게 */
+  #rank-view .card { max-width: 760px; margin-left: auto; margin-right: auto; }
+  body.guest .join-app { max-width: 460px; margin: 0 auto; }
+  .modal-card { max-width: 440px; }
+}
+@media (min-width: 1100px) {
+  body, .tabbar { max-width: 1280px; }
+  #tab-players { grid-template-columns: 400px 1fr; }
+  /* 참가자가 많으면 목록을 두 줄로 */
+  .plist { display: grid; grid-template-columns: 1fr 1fr; column-gap: 24px; }
+  .prow:nth-child(2) { border-top: 0; }
+  .plist > .hint { grid-column: 1 / -1; }
+  .mgrid[data-n="3"], .mgrid[data-n="5"], .mgrid[data-n="6"], .mgrid[data-n="7"] { grid-template-columns: repeat(3, 1fr); }
+}

@@ -102,7 +102,7 @@ export function renderRound() {
   const past = state.rounds.slice(0, -1).map((r, i) => ({ r, i })).reverse();
   view.innerHTML = `
     <div class="round-head"><h2>${cur.no}라운드</h2><span>결과 ${doneCount(cur)}/${cur.matches.length}</span></div>
-    ${cur.matches.map((m) => matchCard(m, ri)).join('')}
+    <div class="mgrid" data-n="${cur.matches.length}">${cur.matches.map((m) => matchCard(m, ri)).join('')}</div>
     ${cur.resting.length ? `<div class="resting">💤 휴식: ${cur.resting.map((id) => { const p = byId(id); return p ? esc(p.name) : '?'; }).join(', ')}</div>` : ''}
     <div class="actions">
       <button type="button" class="btn primary big full" data-action="next-round">다음 라운드 만들기 →</button>
@@ -111,7 +111,7 @@ export function renderRound() {
       <button type="button" class="btn" data-action="copy-round">📋 배정표 복사</button>
     </div>
     ${past.length ? `<div class="past"><div class="hint" style="margin-bottom:8px">지난 라운드 (결과 수정 가능)</div>
-      ${past.map(({ r, i }) => `<details data-r="${i}"${openPast.has(String(i)) ? ' open' : ''}><summary>${r.no}라운드 · 결과 ${doneCount(r)}/${r.matches.length}</summary>${r.matches.map((m) => matchCard(m, i)).join('')}</details>`).join('')}</div>` : ''}`;
+      ${past.map(({ r, i }) => `<details data-r="${i}"${openPast.has(String(i)) ? ' open' : ''}><summary>${r.no}라운드 · 결과 ${doneCount(r)}/${r.matches.length}</summary><div class="mgrid" data-n="${r.matches.length}">${r.matches.map((m) => matchCard(m, i)).join('')}</div></details>`).join('')}</div>` : ''}`;
 }
 
 export function renderRank() {
