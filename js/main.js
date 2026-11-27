@@ -115,8 +115,35 @@ const ops = {
     const match = state.rounds[int(r)]?.matches[int(m)];
     if (!match || matchKey(match) !== key) return { ok: false, msg: '대진이 바뀌었어요. 화면을 확인하고 다시 눌러 주세요.' };
     match.winner = winner === 'A' || winner === 'B' ? winner : null;
+    // 끝난 점수와 승패가 어긋나면: 직접 입력한 점수는 지우고, 심판 점수는 '결과 보냄'만 풀어 심판이 이어서 기록
+    const sc = match.score;
+    if (sc && sc.done && sc.log && sc.log.length) {
+      const a = sc.log.filter((t) => t === 'A').length, b = sc.log.length - a;
+      if (match.winner !== (a > b ? 'A' : 'B')) {
+        if (sc.manual) { delete match.score; return { msg: '승패를 바꿔서 입력한 점수를 지웠어요.' }; }
+        sc.done = false; sc.v++;
+      }
+    }
   },
   // 점수판 규칙: to(15/21/25)·deuce(있음/없음) 중 보낸 것만 바꾼다
+  // 관리자·부 관리자 점수 직접 입력: 높은 쪽이 승리. a·b를 비우면(null) 점수와 승패를 지운다.
+  'set-score': ({ r, m, key, a, b }) => {
+    const match = state.rounds[int(r)]?.matches[int(m)];
+    if (!match || matchKey(match) !== key) return { ok: false, msg: '대진이 바뀌었어요. 화면을 확인하고 다시 입력해 주세요.' };
+    const v = (match.score && match.score.v) || 0;
+    if (a === null && b === null) {
+      delete match.score;
+      match.winner = null;
+      return { msg: `${match.court}코트 점수를 지웠어요.` };
+    }
+    a = int(a); b = int(b);
+    if (!(a >= 0 && a <= 50 && b >= 0 && b <= 50)) return { ok: false, msg: '점수는 0~50 사이로 입력해 주세요.' };
+    if (a === b) return { ok: false, msg: '동점은 입력할 수 없어요. 이긴 팀 점수가 더 커야 해요.' };
+    // 심판 점수판과 같은 형식(log)으로 저장 → 득실·심판 화면에 그대로 쓰인다. v를 올려 심판의 이전 요청은 거절된다.
+    match.score = { first: 'A', log: [...Array(a).fill('A'), ...Array(b).fill('B')], v: v + 1, done: true, manual: true };
+    match.winner = a > b ? 'A' : 'B';
+    return { msg: `${match.court}코트 ${a}:${b} · ${match.winner}팀 승` };
+  },
   'score-to': ({ to, deuce }) => {
     if (to !== undefined) {
       to = int(to);
@@ -290,6 +317,8 @@ const actions = {
     run('round', { replaceLast: true, expect: state.rounds.length });
   },
 
+  'score-edit': (el) => openScore(+el.dataset.r, +el.dataset.m),
+
   win: (el) => {
     const r = +el.dataset.r, mi = +el.dataset.m;
     const m = state.rounds[r]?.matches[mi];
@@ -339,6 +368,53 @@ document.addEventListener('change', (e) => {
   const el = e.target;
   if (el.dataset && el.dataset.action === 'toggle') run('toggle', { id: +el.dataset.id, active: el.checked });
 });
+
+// ───── 점수 직접 입력 창 ─────
+let scoreEdit = null; // {r, m, key}
+const nameList = (ids) => ids.map((id) => findP(id)?.name || '?').join(' · ');
+function openScore(r, mi) {
+  const m = state.rounds[r]?.matches[mi];
+  if (!m) return;
+  scoreEdit = { r, m: mi, key: matchKey(m) };
+  let a = '', b = '';
+  if (m.score && m.score.log && m.score.log.length) {
+    a = m.score.log.filter((t) => t === 'A').length;
+    b = m.score.log.length - a;
+  }
+  const $ = (id) => document.getElementById(id);
+  $('score-title').textContent = `${state.rounds[r].no}라운드 ${m.court}코트 점수`;
+  $('score-a-names').textContent = nameList(m.teamA);
+  $('score-b-names').textContent = nameList(m.teamB);
+  $('score-a').value = a;
+  $('score-b').value = b;
+  $('score-clear').hidden = a === '';
+  $('score-note').textContent = m.score && !m.score.manual && !m.score.done && m.score.log.length
+    ? '🧑‍⚖️ 심판이 기록 중인 경기예요. 저장하면 심판 점수판도 이 점수로 바뀌어요.' : '';
+  $('score-modal').hidden = false;
+  document.body.classList.add('modal-open');
+  setTimeout(() => $('score-a').focus(), 50);
+}
+function closeScore() {
+  document.getElementById('score-modal').hidden = true;
+  document.body.classList.remove('modal-open');
+  scoreEdit = null;
+}
+async function saveScore(clear) {
+  if (!scoreEdit) return;
+  const $ = (id) => document.getElementById(id);
+  const a = $('score-a').value.trim(), b = $('score-b').value.trim();
+  if (!clear) {
+    if (a === '' || b === '') { toast('두 팀 점수를 모두 입력해 주세요.'); return; }
+    if (+a === +b) { toast('동점은 입력할 수 없어요.'); return; }
+  } else if (!confirm('이 경기의 점수와 승패를 지울까요?')) return;
+  const res = await run('set-score', { ...scoreEdit, a: clear ? null : +a, b: clear ? null : +b });
+  if (res && res.ok) closeScore();
+}
+document.getElementById('score-form').addEventListener('submit', (e) => { e.preventDefault(); saveScore(false); });
+document.getElementById('score-clear').addEventListener('click', () => saveScore(true));
+document.getElementById('score-cancel').addEventListener('click', closeScore);
+document.getElementById('score-modal').addEventListener('click', (e) => { if (e.target.id === 'score-modal') closeScore(); });
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !document.getElementById('score-modal').hidden) closeScore(); });
 
 function selectSeg(segId, attr, value) {
   document.querySelectorAll(`#${segId} button`).forEach((b) => b.setAttribute('aria-pressed', String(b.dataset[attr] === value)));

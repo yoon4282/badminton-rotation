@@ -6,8 +6,8 @@
   <meta name="theme-color" content="#14705a">
   <title>배드민턴 대진표</title>
   <!-- stamp:start (node scripts/stamp.mjs 가 자동 생성) -->
-  <script type="importmap">{"imports":{"./js/admin.js":"./js/admin.js?v=65825537","./js/boot.js":"./js/boot.js?v=557d24bd","./js/config.js":"./js/config.js?v=d081b182","./js/invite.js":"./js/invite.js?v=0074cf09","./js/join.js":"./js/join.js?v=28bf4d8b","./js/kakao.js":"./js/kakao.js?v=137b7dc0","./js/main.js":"./js/main.js?v=46c9c49b","./js/matcher.js":"./js/matcher.js?v=941b6681","./js/ocr-parse.js":"./js/ocr-parse.js?v=2db696f4","./js/ocr.js":"./js/ocr.js?v=2db30195","./js/p2p.js":"./js/p2p.js?v=e1dab2c6","./js/players.js":"./js/players.js?v=304b6866","./js/ref.js":"./js/ref.js?v=f80331c7","./js/referee-host.js":"./js/referee-host.js?v=24f92049","./js/roster.js":"./js/roster.js?v=d6da554a","./js/score.js":"./js/score.js?v=679b3053","./js/share.js":"./js/share.js?v=3c3b25ad","./js/state.js":"./js/state.js?v=ecf1810e","./js/stats.js":"./js/stats.js?v=ad7a87f5","./js/ui.js":"./js/ui.js?v=c3f6851e","./js/wishes.js":"./js/wishes.js?v=8222963a"}}</script>
-  <link rel="stylesheet" href="css/style.css?v=ef0eaeae">
+  <script type="importmap">{"imports":{"./js/admin.js":"./js/admin.js?v=65825537","./js/boot.js":"./js/boot.js?v=557d24bd","./js/config.js":"./js/config.js?v=d081b182","./js/invite.js":"./js/invite.js?v=0074cf09","./js/join.js":"./js/join.js?v=28bf4d8b","./js/kakao.js":"./js/kakao.js?v=137b7dc0","./js/main.js":"./js/main.js?v=36807332","./js/matcher.js":"./js/matcher.js?v=941b6681","./js/ocr-parse.js":"./js/ocr-parse.js?v=2db696f4","./js/ocr.js":"./js/ocr.js?v=2db30195","./js/p2p.js":"./js/p2p.js?v=e1dab2c6","./js/players.js":"./js/players.js?v=304b6866","./js/ref.js":"./js/ref.js?v=f80331c7","./js/referee-host.js":"./js/referee-host.js?v=24f92049","./js/roster.js":"./js/roster.js?v=d6da554a","./js/score.js":"./js/score.js?v=679b3053","./js/share.js":"./js/share.js?v=3c3b25ad","./js/state.js":"./js/state.js?v=ecf1810e","./js/stats.js":"./js/stats.js?v=ad7a87f5","./js/ui.js":"./js/ui.js?v=ef74aad1","./js/wishes.js":"./js/wishes.js?v=8222963a"}}</script>
+  <link rel="stylesheet" href="css/style.css?v=aead7bb2">
   <!-- stamp:end -->
 </head>
 <body>
@@ -107,6 +107,27 @@
       <button type="button" id="ref-retry" class="btn big" hidden>다시 연결</button>
       <button type="button" id="ref-renew" class="btn big">🔒 심판 링크 새로 만들기</button>
       <button type="button" id="ref-close" class="btn primary big">닫기 (연결은 유지돼요)</button>
+    </div>
+  </div>
+
+  <!-- 점수 직접 입력 모달 (관리자·부 관리자) -->
+  <div id="score-modal" class="modal" role="dialog" aria-modal="true" aria-labelledby="score-title" hidden>
+    <div class="modal-card">
+      <h2 id="score-title">점수 입력</h2>
+      <form id="score-form" autocomplete="off">
+        <div class="score-in">
+          <label class="si a"><span class="tag">A팀</span><span id="score-a-names" class="si-names"></span>
+            <input id="score-a" type="number" inputmode="numeric" min="0" max="50" placeholder="0" aria-label="A팀 점수"></label>
+          <span class="si-colon">:</span>
+          <label class="si b"><span class="tag">B팀</span><span id="score-b-names" class="si-names"></span>
+            <input id="score-b" type="number" inputmode="numeric" min="0" max="50" placeholder="0" aria-label="B팀 점수"></label>
+        </div>
+        <p class="hint">점수가 높은 팀이 승리로 입력되고, 순위표 득실에도 들어가요.</p>
+        <p id="score-note" class="hint"></p>
+        <button type="submit" class="btn primary big">저장</button>
+        <button type="button" id="score-clear" class="btn danger big">점수·승패 지우기</button>
+        <button type="button" id="score-cancel" class="btn big">취소</button>
+      </form>
     </div>
   </div>
 

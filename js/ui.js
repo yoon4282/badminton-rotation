@@ -107,11 +107,13 @@ function renderWishes() {
 }
 
 // 심판 점수판 점수 (점수가 하나라도 있을 때)
-function scoreLine(m) {
-  if (!m.score || !m.score.log || !m.score.log.length) return '';
+// 점수(심판 점수판 또는 직접 입력) + 점수 입력 버튼
+function scoreLine(m, ri, mi) {
+  const edit = `<button type="button" class="scorebtn" data-action="score-edit" data-r="${ri}" data-m="${mi}">✏️ 점수 ${m.score && m.score.log && m.score.log.length ? '수정' : '입력'}</button>`;
+  if (!m.score || !m.score.log || !m.score.log.length) return `<div class="mscore empty">${edit}</div>`;
   const st = gameState(m.score, state.scoreTo, state.deuce);
-  const state2 = m.score.done ? '최종' : st.over ? '경기 끝 · 심판 확인 대기' : '진행 중';
-  return `<div class="mscore${m.score.done ? ' done' : ''}"><span class="sa">${st.a}</span> : <span class="sb">${st.b}</span><small>🧑‍⚖️ ${state2}</small></div>`;
+  const label = m.score.manual ? '✏️ 직접 입력' : `🧑‍⚖️ ${m.score.done ? '최종' : st.over ? '경기 끝 · 심판 확인 대기' : '진행 중'}`;
+  return `<div class="mscore${m.score.done ? ' done' : ''}"><span class="sa">${st.a}</span> : <span class="sb">${st.b}</span><small>${label} · ${edit}</small></div>`;
 }
 
 function matchCard(m, ri, live = false) {
@@ -126,7 +128,7 @@ function matchCard(m, ri, live = false) {
       <div class="vs">VS</div>
       <div class="team b ${won('B')}"><span class="tag">B팀${m.winner === 'B' ? ' 🏆' : ''}</span>${m.teamB.map(chip).join('')}</div>
     </div>
-    ${scoreLine(m)}
+    ${scoreLine(m, ri, mi)}
     <div class="win-btns">
       <button type="button" class="win a ${on('A')}" data-action="win" data-r="${ri}" data-m="${mi}" data-team="A">A팀 승</button>
       <button type="button" class="win b ${on('B')}" data-action="win" data-r="${ri}" data-m="${mi}" data-team="B">B팀 승</button>
@@ -188,7 +190,7 @@ function unscoredNote() {
     if (matchPoints(m)) scored++;
   }
   if (!decided || scored === decided) return '';
-  return `<p class="hint rank-note">득실은 🧑‍⚖️ 심판 점수판으로 점수를 기록한 경기만 계산해요 (${decided}경기 중 ${scored}경기). 순위는 승률 → 승수 → 득실차 순이에요.</p>`;
+  return `<p class="hint rank-note">득실은 점수가 있는 경기만 계산해요 (${decided}경기 중 ${scored}경기). 대진 탭 경기 카드의 ✏️ 점수 입력이나 🧑‍⚖️ 심판 점수판으로 점수를 넣을 수 있어요. 순위는 승률 → 승수 → 득실차 순이에요.</p>`;
 }
 
 export function renderRank() {
