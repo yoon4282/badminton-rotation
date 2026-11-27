@@ -1,5 +1,9 @@
 // 운영진 화면의 [QR 초대 코드] 모달. 연결/QR 라이브러리가 실패해도 다른 기능에는 영향이 없다.
 import { startHost, hostId, loadLib, QR_URLS } from './p2p.js';
+import { kakaoEnabled, sendKakaoText } from './kakao.js';
+import { shareText } from './share.js';
+
+const JOIN_TEXT = '🏸 배드민턴 모임 참가 등록\n아래 버튼을 눌러 이름·성별·급수를 입력하면 명단에 바로 올라가요!';
 
 const $ = (id) => document.getElementById(id);
 let joinedCount = 0;
@@ -41,7 +45,7 @@ const qrStatus = (s) => { if (!$('qr-modal').hidden) setStatus(s); };
 async function connect() {
   $('qr-box').innerHTML = '';
   $('qr-url').hidden = true;
-  $('qr-copy').disabled = true;
+  $('qr-copy').disabled = true; $('qr-kakao').disabled = true;
   setStatus('connecting');
   try {
     const id = await startHost({
@@ -55,7 +59,7 @@ async function connect() {
     currentUrl = joinUrl(id);
     $('qr-url').value = currentUrl;
     $('qr-url').hidden = false;
-    $('qr-copy').disabled = false;
+    $('qr-copy').disabled = false; $('qr-kakao').disabled = false;
     setStatus('ready');
     await renderQr(currentUrl);
   } catch (e) {
@@ -72,7 +76,7 @@ function open() {
     currentUrl = joinUrl(id);
     $('qr-url').value = currentUrl;
     $('qr-url').hidden = false;
-    $('qr-copy').disabled = false;
+    $('qr-copy').disabled = false; $('qr-kakao').disabled = false;
     setStatus(fixedIdRef ? '✅ 참가자가 QR을 찍으면 메인 관리자 명단에 바로 추가돼요' : 'ready');
     renderQr(currentUrl);
   } else {
@@ -93,6 +97,16 @@ export function initInvite({ onJoin, toast, copyText, fixedId = null }) {
   $('qr-retry').addEventListener('click', connect);
   $('qr-modal').addEventListener('click', (e) => { if (e.target.id === 'qr-modal') close(); });
   document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !$('qr-modal').hidden) close(); });
+  // ① 카톡 채팅방 선택이 바로 열림(메시지의 [참가 등록하기] 버튼 → 참가 화면) → ② 휴대폰 공유 창 → ③ 복사
+  $('qr-kakao').addEventListener('click', async () => {
+    if (!currentUrl) return;
+    if (kakaoEnabled()) {
+      try { if (sendKakaoText(JOIN_TEXT, { url: currentUrl, button: '참가 등록하기' })) return; } catch (e) { /* 아래 대체 방식 */ }
+    }
+    const res = await shareText(JOIN_TEXT + '\n' + currentUrl);
+    if (res === 'copied') toast('이 기기는 바로 공유가 안 돼서 참가 링크를 복사했어요. 카톡에 붙여넣기 하세요!');
+    else if (res === 'fail') toast('공유에 실패했어요. 링크 복사 버튼을 이용해 주세요.');
+  });
   $('qr-copy').addEventListener('click', async () => {
     toast((await copyText(currentUrl)) ? '참가 링크를 복사했어요.' : '복사에 실패했어요. 링크를 길게 눌러 복사해 주세요.');
   });

@@ -26,14 +26,15 @@ function ready() {
 }
 
 // 성공적으로 카톡 공유를 띄웠으면 true, SDK가 준비 안 됐으면 false
-export function sendKakaoText(text) {
+// url: 메시지를 눌렀을 때 열 주소(카카오에 등록한 도메인이어야 함), button: 메시지 아래 버튼 글자
+export function sendKakaoText(text, { url = location.origin + location.pathname, button } = {}) {
   const K = ready();
   if (!K) { preloadKakao().catch(() => {}); return false; }
-  const url = location.origin + location.pathname;
   K.Share.sendDefault({
     objectType: 'text',
     text,
     link: { mobileWebUrl: url, webUrl: url },
+    ...(button ? { buttonTitle: button } : {}),
   });
   return true;
 }
