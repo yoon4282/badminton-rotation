@@ -279,10 +279,10 @@ Bob
   assert.equal(generateRound({ players: mk(8), rounds: [], courts: 2 }).round.granted, undefined);
 }
 
-// 13) 심판 점수판 규칙: 21점·듀스 2점 차·30점 상한, 서브 위치, 되돌리기/결과 보내기
+// 13) 심판 점수판 규칙: 21점·듀스 2점 차·최대 31점(15점 경기는 21점)·듀스 없음, 서브 위치, 되돌리기/결과 보내기
 {
   const { gameState, applyScoreOp, emptyScore } = await import('../js/score.js');
-  const play = (seq, to = 21) => { const sc = emptyScore(); for (const t of seq) applyScoreOp(sc, 'point', { team: t }, to); return sc; };
+  const play = (seq, to = 21, deuce = true) => { const sc = emptyScore(); for (const t of seq) applyScoreOp(sc, 'point', { team: t }, to, deuce); return sc; };
   const rep = (t, n) => Array(n).fill(t);
   let st = gameState(play([...rep('A', 21), ...rep('B', 19)]));
   assert.ok(st.over && st.winner === 'A');
@@ -292,8 +292,28 @@ Bob
   st = gameState(play([...alt(20), 'A', 'A']));
   assert.ok(st.over && st.winner === 'A', '22:20 승');
   st = gameState(play([...alt(29), 'B']));
-  assert.ok(st.over && st.winner === 'B' && st.b === 30, '30점 상한');
+  assert.ok(!st.over, '30:29는 아직 (최대 31점)');
+  st = gameState(play([...alt(30), 'B']));
+  assert.ok(st.over && st.winner === 'B' && st.b === 31 && st.cap === 31, '21점 경기 최대 31점');
+  st = gameState(play([...alt(30), 'B'], 25), 25);
+  assert.ok(st.over && st.b === 31 && st.cap === 31, '25점 경기 최대 31점');
+  st = gameState(play([...alt(24), 'A'], 25), 25);
+  assert.ok(!st.over && st.point === 'A', '25:24 게임 포인트');
+  // 15점 경기: 14:14 듀스, 최대 21점
   assert.ok(gameState(play(rep('A', 15), 15), 15).over, '15점 경기');
+  st = gameState(play([...alt(14), 'A'], 15), 15);
+  assert.ok(!st.over, '15:14는 아직');
+  st = gameState(play([...alt(20), 'A'], 15), 15);
+  assert.ok(st.over && st.a === 21 && st.cap === 21, '15점 경기 최대 21점');
+  // 듀스 없음: 목표 점수에 먼저 닿으면 끝
+  for (const to of [15, 21, 25]) {
+    st = gameState(play([...alt(to - 1), 'B'], to, false), to, false);
+    assert.ok(st.over && st.winner === 'B' && st.b === to && st.cap === to, `듀스 없음 ${to}점`);
+    assert.ok(!gameState(play(alt(to - 1), to, false), to, false).deuce, '듀스 없음이면 듀스 표시 없음');
+    assert.equal(gameState(play(alt(to - 1), to, false), to, false).point, 'AB', '듀스 없음 동점이면 두 팀 다 게임 포인트');
+  }
+  assert.ok(gameState(play(alt(20)), 21, true).deuce, '20:20 듀스 표시');
+  assert.equal(gameState(play(alt(30)), 21, true).point, 'AB', '30:30이면 두 팀 다 게임 포인트');
   // 서브: 처음엔 first, 이후 마지막 랠리 이긴 팀. 서브 팀 점수 짝수=오른쪽
   const sc = emptyScore('B');
   assert.equal(gameState(sc).server, 'B');

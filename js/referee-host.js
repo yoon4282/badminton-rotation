@@ -4,6 +4,7 @@
 import { startHost, hostId, kickRefs, refCounts } from './p2p.js';
 import { state } from './state.js';
 import { renderQr } from './invite.js';
+import { capOf } from './score.js';
 
 const $ = (id) => document.getElementById(id);
 const KEY_STORE = 'bdm-ref-key';
@@ -44,6 +45,10 @@ export function renderRefModal(counts = refCounts()) {
   $('ref-courts').innerHTML = Array.from({ length: n }, (_, i) => i + 1).map((c) =>
     `<button type="button" data-court="${c}" aria-pressed="${c === court}">${c}코트${counts[c] ? ' 🧑‍⚖️' : ''}</button>`).join('');
   document.querySelectorAll('#ref-to button').forEach((b) => b.setAttribute('aria-pressed', String(+b.dataset.to === state.scoreTo)));
+  document.querySelectorAll('#ref-deuce button').forEach((b) => b.setAttribute('aria-pressed', String((b.dataset.deuce === '1') === state.deuce)));
+  $('ref-rule').textContent = state.deuce
+    ? `${state.scoreTo}점 먼저 · ${state.scoreTo - 1}:${state.scoreTo - 1}부터 듀스(2점 차) · 최대 ${capOf(state.scoreTo, true)}점`
+    : `${state.scoreTo}점에 먼저 닿으면 끝 (듀스 없음)`;
   const m = cur && cur.matches.find((x) => x.court === court);
   $('ref-count').textContent = (counts[court] ? `${court}코트 심판 연결됨 (${counts[court]}명)` : `${court}코트 심판이 아직 없어요`) +
     (cur ? (m ? '' : ` · 이번 라운드에 ${court}코트 경기는 없어요`) : ' · 대진을 만들면 점수판에 경기가 떠요');
@@ -88,7 +93,7 @@ function close() {
   document.body.classList.remove('modal-open');
 }
 
-// handlers: startHost에 넘길 심판 핸들러를 돌려주는 함수, setScoreTo: 목표 점수 변경(op)
+// handlers: startHost에 넘길 심판 핸들러를 돌려주는 함수, setRule: 점수 규칙 변경 {to} 또는 {deuce} (op)
 export function initRefHost(o) {
   opts = o;
   $('ref-close').addEventListener('click', close);
@@ -98,7 +103,9 @@ export function initRefHost(o) {
     const cb = e.target.closest('#ref-courts button');
     if (cb) { court = +cb.dataset.court; renderRefModal(); if (hostId()) showUrl(); return; }
     const tb = e.target.closest('#ref-to button');
-    if (tb) opts.setScoreTo(+tb.dataset.to);
+    if (tb) { opts.setRule({ to: +tb.dataset.to }); return; }
+    const db = e.target.closest('#ref-deuce button');
+    if (db) opts.setRule({ deuce: db.dataset.deuce === '1' });
   });
   document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !$('ref-modal').hidden) close(); });
   $('ref-copy').addEventListener('click', async () => {

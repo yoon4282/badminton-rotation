@@ -15,6 +15,7 @@ export const state = {
   wishes: [],  // 같이 치기 요청 {id, kind:'team'|'court'|'group', ids:[id...], fixed}
   nextWishId: 1,
   scoreTo: 21, // 심판 점수판 목표 점수 (15/21/25)
+  deuce: true, // 듀스 (2점 차·최대 점수까지) / 끄면 목표 점수에 먼저 닿으면 끝
 };
 const cleanTo = (n) => ([15, 21, 25].includes(n) ? n : 21);
 
@@ -45,6 +46,7 @@ export function load() {
     state.wishes = cleanWishes(d.wishes);
     state.nextWishId = nextWish(state.wishes, d.nextWishId);
     state.scoreTo = cleanTo(d.scoreTo);
+    state.deuce = d.deuce !== false;
     const maxId = state.players.reduce((m, p) => Math.max(m, p.id), 0);
     state.nextId = Math.max(Number.isInteger(d.nextId) ? d.nextId : 1, maxId + 1);
   } catch (e) {
@@ -58,7 +60,7 @@ export function setPersist(on) { persist = on; }
 
 // 메인 → 부 관리자로 보내는 상태 (탭 위치는 기기마다 따로)
 export function snapshot() {
-  return { courts: state.courts, nextId: state.nextId, players: state.players, rounds: state.rounds, wishes: state.wishes, nextWishId: state.nextWishId, scoreTo: state.scoreTo };
+  return { courts: state.courts, nextId: state.nextId, players: state.players, rounds: state.rounds, wishes: state.wishes, nextWishId: state.nextWishId, scoreTo: state.scoreTo, deuce: state.deuce };
 }
 export function applySnapshot(s) {
   if (!s || typeof s !== 'object') return;
@@ -69,6 +71,7 @@ export function applySnapshot(s) {
   state.wishes = cleanWishes(s.wishes);
   state.nextWishId = nextWish(state.wishes, s.nextWishId);
   state.scoreTo = cleanTo(s.scoreTo);
+  state.deuce = s.deuce !== false;
 }
 
 export function save() {

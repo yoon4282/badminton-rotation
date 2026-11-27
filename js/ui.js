@@ -109,7 +109,7 @@ function renderWishes() {
 // 심판 점수판 점수 (점수가 하나라도 있을 때)
 function scoreLine(m) {
   if (!m.score || !m.score.log || !m.score.log.length) return '';
-  const st = gameState(m.score, state.scoreTo);
+  const st = gameState(m.score, state.scoreTo, state.deuce);
   const state2 = m.score.done ? '최종' : st.over ? '경기 끝 · 심판 확인 대기' : '진행 중';
   return `<div class="mscore${m.score.done ? ' done' : ''}"><span class="sa">${st.a}</span> : <span class="sb">${st.b}</span><small>🧑‍⚖️ ${state2}</small></div>`;
 }

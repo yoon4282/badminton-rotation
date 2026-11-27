@@ -43,7 +43,7 @@ function side(t, m, st) {
     <span class="rtag">${t}팀${won ? ' 🏆' : ''}</span>
     <span class="rnames">${names(isA ? m.teamA : m.teamB)}</span>
     <span class="rpts">${pts}</span>
-    <span class="rsrv">${serving ? `🏸 서브 · ${st.side === 'right' ? '오른쪽' : '왼쪽'}` : st.point === t ? '게임 포인트' : '&nbsp;'}</span>
+    <span class="rsrv">${[serving ? `🏸 서브 · ${st.side === 'right' ? '오른쪽' : '왼쪽'}` : '', st.point && st.point.includes(t) ? '<b class="gp">게임 포인트</b>' : ''].filter(Boolean).join('<br>') || '&nbsp;'}</span>
   </button>`;
 }
 
@@ -64,7 +64,8 @@ function render() {
     body.innerHTML = `<p class="rwait">${view.round ? `${view.round}라운드에는 ${view.court}코트 경기가 없어요.` : '아직 대진이 없어요.'}<br>대진이 나오면 이 화면에 자동으로 떠요.</p>`;
     return;
   }
-  const st = gameState(m.score, view.scoreTo);
+  const deuce = view.deuce !== false;
+  const st = gameState(m.score, view.scoreTo, deuce);
   const sides = swapped ? ['B', 'A'] : ['A', 'B'];
   const fresh = !m.score.log.length && !m.score.done;
   let banner = '';
@@ -78,7 +79,7 @@ function render() {
     banner = '<div class="rbanner deuce">듀스! 2점 먼저 앞서면 승리</div>';
   }
   body.innerHTML = `
-    <div class="rmeta">${view.round}라운드${m.type ? ` · ${esc(m.type)}` : ''} · ${view.scoreTo}점 경기</div>
+    <div class="rmeta">${view.round}라운드${m.type ? ` · ${esc(m.type)}` : ''} · ${view.scoreTo}점 경기 · ${deuce ? `듀스 있음(최대 ${st.cap}점)` : '듀스 없음'}</div>
     ${fresh ? `<div class="rfirst"><span>먼저 서브할 팀</span>
       <div class="seg two">${['A', 'B'].map((t) => `<button type="button" data-ref="serve" data-team="${t}" aria-pressed="${m.score.first === t}" ${busy ? 'disabled' : ''}>${t}팀</button>`).join('')}</div></div>` : ''}
     <div class="rboard">${sides.map((t) => side(t, m, st)).join('')}</div>
@@ -87,7 +88,9 @@ function render() {
       <button type="button" class="btn" data-ref="undo" ${busy || (fresh && !m.score.done) ? 'disabled' : ''}>↩ ${m.score.done ? '결과 취소' : '되돌리기'}</button>
       <button type="button" class="btn" data-ref="swap">⇄ 좌우 바꾸기</button>
     </div>
-    <p class="hint rhint">점수를 딴 팀 쪽을 누르세요. ${view.scoreTo}점 먼저(듀스면 2점 차, 최대 ${Math.min(view.scoreTo + 9, 30)}점) 따면 끝나요.</p>`;
+    <p class="hint rhint">점수를 딴 팀 쪽을 누르세요. ${deuce
+      ? `${view.scoreTo}점 먼저 따면 끝나요. ${view.scoreTo - 1}:${view.scoreTo - 1}부터는 듀스라 2점 차가 나야 하고, ${st.cap}점에 먼저 닿으면 끝나요.`
+      : `듀스 없이 ${view.scoreTo}점에 먼저 닿으면 끝나요.`}</p>`;
 }
 
 async function send(op, args = {}) {

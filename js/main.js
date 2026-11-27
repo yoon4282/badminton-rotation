@@ -12,7 +12,7 @@ import { initOcr } from './ocr.js';
 import { initAdminHost, broadcastState } from './admin.js';
 import { createAdminClient, setHostHandlers, broadcastRefs } from './p2p.js';
 import { initRefHost, openRefModal, renderRefModal, checkRefKey } from './referee-host.js';
-import { emptyScore, gameState, applyScoreOp, SCORE_TO } from './score.js';
+import { emptyScore, gameState, applyScoreOp, SCORE_TO, capOf } from './score.js';
 
 // ?admin=방ID&key=비밀키 로 열면 부 관리자 화면: 메인 관리자의 상태를 받아 보고, 조작은 메인에 요청한다
 const params = new URLSearchParams(location.search);
@@ -116,11 +116,15 @@ const ops = {
     if (!match || matchKey(match) !== key) return { ok: false, msg: '대진이 바뀌었어요. 화면을 확인하고 다시 눌러 주세요.' };
     match.winner = winner === 'A' || winner === 'B' ? winner : null;
   },
-  'score-to': ({ to }) => {
-    to = int(to);
-    if (!SCORE_TO.includes(to)) return { ok: false };
-    state.scoreTo = to;
-    return { msg: `🧑‍⚖️ 점수판: ${to}점 경기` };
+  // 점수판 규칙: to(15/21/25)·deuce(있음/없음) 중 보낸 것만 바꾼다
+  'score-to': ({ to, deuce }) => {
+    if (to !== undefined) {
+      to = int(to);
+      if (!SCORE_TO.includes(to)) return { ok: false };
+      state.scoreTo = to;
+    }
+    if (deuce !== undefined) state.deuce = !!deuce;
+    return { msg: `🧑‍⚖️ 점수판: ${ruleText()}` };
   },
   'reset-rounds': () => { resetRounds(); return { tab: 'players', msg: '새 경기를 시작해요.' }; },
   'reset-all': () => { resetAll(); return { msg: '초기화했어요.' }; },
@@ -129,6 +133,7 @@ const HOST_ONLY = new Set(['reset-rounds', 'reset-all']);
 
 // ───── 코트 심판 (메인 관리자 기기에서만 실행) ─────
 // 심판은 연결할 때 정한 코트의 '현재 라운드' 경기만 조작한다. key(라운드+대진)와 v(점수 버전)가 다르면 거절.
+const ruleText = () => `${state.scoreTo}점 · ${state.deuce ? `듀스 있음(최대 ${capOf(state.scoreTo, true)}점)` : '듀스 없음'}`;
 const refKey = (ri, m) => `${ri}:${matchKey(m)}`;
 const pinfo = (id) => { const p = findP(id); return p ? { name: p.name, level: p.level, gender: p.gender || null } : { name: '?' }; };
 
@@ -136,7 +141,7 @@ function refView(court) {
   const ri = state.rounds.length - 1, r = state.rounds[ri];
   const m = r && r.matches.find((x) => x.court === court);
   return {
-    court, round: r ? r.no : 0, scoreTo: state.scoreTo,
+    court, round: r ? r.no : 0, scoreTo: state.scoreTo, deuce: state.deuce,
     match: m ? {
       key: refKey(ri, m), type: m.type || null, winner: m.winner,
       teamA: m.teamA.map(pinfo), teamB: m.teamB.map(pinfo), score: m.score || emptyScore(),
@@ -152,8 +157,8 @@ function handleRefOp(court, op, args) {
   if (!m.score) m.score = emptyScore();
   if (int(args.v) !== m.score.v) return { ok: false, error: '점수가 이미 바뀌었어요. 화면을 확인하고 다시 눌러 주세요.' };
   const wasDone = m.score.done;
-  if (!applyScoreOp(m.score, op, args, state.scoreTo)) return { ok: false, error: '지금은 할 수 없어요.' };
-  const st = gameState(m.score, state.scoreTo);
+  if (!applyScoreOp(m.score, op, args, state.scoreTo, state.deuce)) return { ok: false, error: '지금은 할 수 없어요.' };
+  const st = gameState(m.score, state.scoreTo, state.deuce);
   if (op === 'finish') {
     m.winner = st.winner;
     toast(`🧑‍⚖️ ${court}코트 결과: ${st.winner}팀 승 (${st.a}:${st.b})`);
@@ -427,7 +432,7 @@ if (SUB) {
       renderRefModal(counts);
     },
   });
-  initRefHost({ toast, copyText, handlers: () => ({}), setScoreTo: (to) => run('score-to', { to }) });
+  initRefHost({ toast, copyText, handlers: () => ({}), setRule: (rule) => run('score-to', rule) });
   initAdminHost({
     toast, copyText,
     onOp: handleSubOp,

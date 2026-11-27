@@ -309,7 +309,8 @@ body.refmode .topbar, body.refmode main, body.refmode .tabbar { display: none; }
 .rnames { display: flex; flex-direction: column; align-items: center; gap: 2px; font-weight: 700; font-size: 17px; }
 .rname { white-space: nowrap; }
 .rpts { font-size: clamp(72px, 24vw, 180px); font-weight: 800; line-height: 1; font-variant-numeric: tabular-nums; }
-.rsrv { font-size: 14px; font-weight: 700; color: var(--primary-d); min-height: 20px; }
+.rsrv { font-size: 14px; font-weight: 700; color: var(--primary-d); min-height: 20px; text-align: center; line-height: 1.4; }
+.rsrv .gp { color: #b26a00; }
 .rbanner { margin-top: 10px; padding: 12px; border-radius: var(--radius); background: #e9f6f1; text-align: center; font-weight: 700; }
 .rbanner small { display: block; font-weight: 400; color: var(--muted); margin-top: 2px; }
 .rbanner.deuce { background: #fff3cd; color: #7a5200; }
