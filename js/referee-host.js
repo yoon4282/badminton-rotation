@@ -49,9 +49,9 @@ export function renderRefModal(counts = refCounts()) {
   $('ref-rule').textContent = state.deuce
     ? `${state.scoreTo}점 먼저 · ${state.scoreTo - 1}:${state.scoreTo - 1}부터 듀스(2점 차) · 최대 ${capOf(state.scoreTo, true)}점`
     : `${state.scoreTo}점에 먼저 닿으면 끝 (듀스 없음)`;
-  const m = cur && cur.matches.find((x) => x.court === court);
+  const has = state.rounds.some((r) => r.matches.some((x) => x.court === court));
   $('ref-count').textContent = (counts[court] ? `${court}코트 심판 연결됨 (${counts[court]}명)` : `${court}코트 심판이 아직 없어요`) +
-    (cur ? (m ? '' : ` · 이번 라운드에 ${court}코트 경기는 없어요`) : ' · 대진을 만들면 점수판에 경기가 떠요');
+    (cur ? (has ? '' : ` · 아직 ${court}코트 경기가 없어요`) : ' · 대진을 만들면 점수판에 경기가 떠요');
 }
 
 function showUrl() {

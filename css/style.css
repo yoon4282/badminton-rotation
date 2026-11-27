@@ -323,3 +323,11 @@ body.refmode .topbar, body.refmode main, body.refmode .tabbar { display: none; }
   .rside { min-height: 64vh; }
   .rpts { font-size: clamp(64px, 22vh, 160px); }
 }
+
+/* 심판: 라운드 고르기 */
+.rchips { display: flex; gap: 6px; overflow-x: auto; padding: 2px 0 8px; -webkit-overflow-scrolling: touch; scrollbar-width: none; }
+.rchips::-webkit-scrollbar { display: none; }
+.rchip { flex: none; min-height: 36px; padding: 0 12px; border: 1px solid var(--line); border-radius: 99px; background: #fff; font-size: 14px; font-weight: 700; color: var(--muted); }
+.rchip.next { border-color: var(--primary); color: var(--primary-d); }
+.rchip.on { background: var(--primary); border-color: var(--primary); color: #fff; }
+.rmeta b { color: var(--text); }

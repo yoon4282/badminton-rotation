@@ -176,7 +176,7 @@ export function renderRound() {
       <button type="button" class="btn" data-action="copy-round">📋 배정표 복사</button>
     </div>
     ${past.length ? `<div class="past"><div class="hint" style="margin-bottom:8px">지난 라운드 (결과 수정 가능)</div>
-      ${past.map(({ r, i }) => `<details data-r="${i}"${openPast.has(String(i)) ? ' open' : ''}><summary>${r.no}라운드 · 결과 ${doneCount(r)}/${r.matches.length}</summary><div class="mgrid" data-n="${r.matches.length}">${r.matches.map((m) => matchCard(m, i)).join('')}</div></details>`).join('')}</div>` : ''}`;
+      ${past.map(({ r, i }) => `<details data-r="${i}"${openPast.has(String(i)) ? ' open' : ''}><summary>${r.no}라운드 · 결과 ${doneCount(r)}/${r.matches.length}</summary><div class="mgrid" data-n="${r.matches.length}">${r.matches.map((m) => matchCard(m, i, true)).join('')}</div></details>`).join('')}</div>` : ''}`;
 }
 
 export function renderRank() {
