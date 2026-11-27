@@ -1,6 +1,16 @@
 // 렌더링 (상태를 읽어 HTML 생성)
 import { state } from './state.js';
 import { computeStats, ranking, fmtRate } from './stats.js';
+import { WISH_SIZE } from './matcher.js';
+import { WISH_LABEL } from './wishes.js';
+
+// 같이 치기 요청을 만드는 중인 선택 (이 기기 화면에만, 저장하지 않음)
+export const wishDraft = { kind: 'team', fixed: false, ids: [] };
+const WISH_GUIDE = {
+  team: '한 팀이 될 2명을 고르세요.',
+  court: '같은 코트에서 칠 2명을 고르세요. (같은 편이든 상대든)',
+  group: '한 코트에서 같이 칠 4명을 고르세요. 팀은 돌아가며 바뀌어요.',
+};
 
 const $ = (s) => document.querySelector(s);
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -57,6 +67,41 @@ export function renderPlayers() {
       </li>`;
     }).join('')
     : '<li class="hint" style="padding:12px 0">아직 참가자가 없어요. 위에서 추가해 주세요.</li>';
+  renderWishes();
+}
+
+const wishNames = (w) => w.ids.map((id) => { const p = byId(id); return p ? esc(p.name) : '?'; }).join(w.kind === 'team' ? ' & ' : ' · ');
+
+function renderWishes() {
+  const n = WISH_SIZE[wishDraft.kind];
+  // 지워졌거나 휴식 중인 사람은 고른 목록에서 뺀다
+  wishDraft.ids = wishDraft.ids.filter((id) => byId(id)?.active);
+  $('#wish-summary').textContent = state.wishes.length ? `${state.wishes.length}건` : '';
+  $('#wish-list').innerHTML = state.wishes.length
+    ? state.wishes.map((w) => {
+      const resting = w.ids.some((id) => !byId(id)?.active);
+      return `<li class="wrow">
+        <span class="wkind wk-${w.kind}">${WISH_LABEL[w.kind]}</span>
+        <div class="wname">${wishNames(w)}${resting ? '<small>휴식 중인 사람이 있어 지금은 반영 안 돼요</small>' : ''}</div>
+        <button type="button" class="wmode ${w.fixed ? 'fixed' : ''}" data-action="wish-fix" data-id="${w.id}" data-fixed="${w.fixed ? 1 : 0}" aria-label="한 번/계속 바꾸기">${w.fixed ? '🔁 계속' : '1️⃣ 한 번'}</button>
+        <button type="button" class="icon-btn" data-action="wish-del" data-id="${w.id}" aria-label="요청 삭제">✕</button>
+      </li>`;
+    }).join('')
+    : '<li class="hint" style="padding:6px 0">아직 요청이 없어요.</li>';
+
+  document.querySelectorAll('#wish-kind button').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.kind === wishDraft.kind)));
+  document.querySelectorAll('#wish-mode button').forEach((b) => b.setAttribute('aria-pressed', String((b.dataset.fixed === '1') === wishDraft.fixed)));
+  $('#wish-guide').textContent = WISH_GUIDE[wishDraft.kind] + (wishDraft.fixed ? ' 매 라운드 같이 넣어요.' : ' 다음 라운드에 한 번 들어주고 사라져요.');
+  const active = state.players.filter((p) => p.active);
+  $('#wish-pick').innerHTML = active.length
+    ? active.map((p) => {
+      const on = wishDraft.ids.includes(p.id);
+      return `<button type="button" class="wpick ${on ? 'on' : ''}" data-action="wish-pick" data-id="${p.id}" aria-pressed="${on}">${esc(p.name)}${gdBadge(p.gender)}</button>`;
+    }).join('')
+    : '<span class="hint">참가 중인 사람이 없어요.</span>';
+  const btn = $('#wish-add');
+  btn.disabled = wishDraft.ids.length !== n;
+  btn.textContent = wishDraft.ids.length === n ? `🔗 ${WISH_LABEL[wishDraft.kind]} 요청 추가` : `${n}명을 골라 주세요 (${wishDraft.ids.length}/${n})`;
 }
 
 function matchCard(m, ri) {
@@ -64,7 +109,7 @@ function matchCard(m, ri) {
   const won = (t) => (m.winner === t ? 'won' : '');
   const on = (t) => (m.winner === t ? 'on' : '');
   return `<article class="match">
-    <header>${m.court}코트${m.type ? `<span class="mtype ${TYPE_CLASS[m.type] || ''}">${m.type}</span>` : ''}</header>
+    <header>${m.court}코트${m.wish ? '<span class="mtype t-wish">🔗 같이</span>' : ''}${m.type ? `<span class="mtype ${TYPE_CLASS[m.type] || ''}">${m.type}</span>` : ''}</header>
     <div class="teams">
       <div class="team a ${won('A')}"><span class="tag">A팀${m.winner === 'A' ? ' 🏆' : ''}</span>${m.teamA.map(chip).join('')}</div>
       <div class="vs">VS</div>
@@ -75,6 +120,13 @@ function matchCard(m, ri) {
       <button type="button" class="win b ${on('B')}" data-action="win" data-r="${ri}" data-m="${mi}" data-team="B">B팀 승</button>
     </div>
   </article>`;
+}
+
+// 아직 못 들어준 한 번 요청 (다음 라운드에 다시 시도)
+function waitingWishes() {
+  const list = state.wishes.filter((w) => !w.fixed);
+  if (!list.length) return '';
+  return `<div class="resting wish-wait">🔗 다음 판에 같이 넣을 요청: ${list.map((w) => `${wishNames(w)}(${WISH_LABEL[w.kind]})`).join(', ')}</div>`;
 }
 
 const doneCount = (r) => r.matches.filter((m) => m.winner).length;
@@ -104,6 +156,7 @@ export function renderRound() {
     <div class="round-head"><h2>${cur.no}라운드</h2><span>결과 ${doneCount(cur)}/${cur.matches.length}</span></div>
     <div class="mgrid" data-n="${cur.matches.length}">${cur.matches.map((m) => matchCard(m, ri)).join('')}</div>
     ${cur.resting.length ? `<div class="resting">💤 휴식: ${cur.resting.map((id) => { const p = byId(id); return p ? esc(p.name) : '?'; }).join(', ')}</div>` : ''}
+    ${waitingWishes()}
     <div class="actions">
       <button type="button" class="btn primary big full" data-action="next-round">다음 라운드 만들기 →</button>
       <button type="button" class="btn kakao full" data-action="share-round">💬 카톡으로 배정표 공유</button>

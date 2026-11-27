@@ -1,7 +1,9 @@
 import { state, load, save, setCourts, resetRounds, resetAll, LEVELS, setPersist, snapshot, applySnapshot } from './state.js';
 import { addPlayer, addBulk, addEntries, toggleActive, cycleLevel, cycleGender, removePlayer, hasHistory } from './players.js';
 import { generateRound } from './matcher.js';
-import { renderAll, showTab, toast } from './ui.js';
+import { renderAll, showTab, toast, wishDraft } from './ui.js';
+import { addWish, removeWish, setWishFixed, dropPlayerWishes, consumeGranted, wishesWithRestored, WISH_LABEL } from './wishes.js';
+import { WISH_SIZE } from './matcher.js';
 import { roundText, rankText, copyText, shareText, roundTextKakao, rankTextKakao } from './share.js';
 import { kakaoEnabled, preloadKakao, sendKakaoText, KAKAO_TEXT_MAX } from './kakao.js';
 import { initInvite } from './invite.js';
@@ -66,6 +68,7 @@ const ops = {
     id = int(id);
     if (hasHistory(id)) return { ok: false, msg: '경기 기록이 있어 삭제할 수 없어요. 스위치로 휴식 처리하세요.' };
     removePlayer(id);
+    dropPlayerWishes(id);
   },
   // 원하는 상태(active)를 보내서, 두 관리자가 동시에 눌러도 뒤집히지 않게
   toggle: ({ id, active }) => {
@@ -79,11 +82,31 @@ const ops = {
     if (int(expect) !== state.rounds.length) return { ok: false, msg: '다른 관리자가 먼저 라운드를 바꿨어요. 화면을 확인해 주세요.' };
     if (replaceLast && !state.rounds.length) return { ok: false };
     const base = replaceLast ? state.rounds.slice(0, -1) : state.rounds;
-    const res = generateRound({ players: state.players, rounds: base, courts: state.courts });
+    // 다시 짜기면 그 라운드에서 들어준 한 번 요청을 되돌려 놓고 다시 짠다
+    const wishes = replaceLast ? wishesWithRestored(state.rounds[state.rounds.length - 1]) : state.wishes;
+    const res = generateRound({ players: state.players, rounds: base, courts: state.courts, wishes });
     if (res.error) return { ok: false, msg: res.error };
+    state.wishes = wishes;
     if (replaceLast) state.rounds[state.rounds.length - 1] = res.round;
     else state.rounds.push(res.round);
-    return { round: true, msg: replaceLast ? '현재 라운드를 다시 짰어요.' : '' };
+    const nGranted = (res.round.granted || []).length;
+    consumeGranted(res.round);
+    const waiting = state.wishes.filter((w) => !w.fixed).length;
+    const wmsg = (nGranted ? `🔗 같이 치기 ${nGranted}건 반영` : '') + (waiting ? `${nGranted ? ' · ' : '🔗 '}${waiting}건은 다음 판에 다시 시도` : '');
+    return { round: true, msg: [replaceLast ? '현재 라운드를 다시 짰어요.' : '', wmsg].filter(Boolean).join(' ') };
+  },
+  'wish-add': ({ kind, ids, fixed }) => {
+    const list = (Array.isArray(ids) ? ids : []).slice(0, 4).map(int);
+    const r = addWish(String(kind), list, !!fixed);
+    if (!r.ok) return r;
+    const names = r.wish.ids.map((id) => findP(id)?.name || '?').join('·');
+    return { wishAdded: true, msg: `🔗 ${names} ${WISH_LABEL[r.wish.kind]} (${r.wish.fixed ? '계속' : '다음 판 한 번'}) · 다음 라운드부터 반영돼요` };
+  },
+  'wish-del': ({ id }) => { if (!removeWish(int(id))) return { ok: false, msg: '이미 지워진 요청이에요.' }; return { msg: '요청을 지웠어요.' }; },
+  'wish-fix': ({ id, fixed }) => {
+    const w = setWishFixed(int(id), !!fixed);
+    if (!w) return { ok: false, msg: '요청을 찾지 못했어요.' };
+    return { msg: w.fixed ? '🔗 계속 같이 치기로 바꿨어요.' : '🔗 다음 판 한 번만으로 바꿨어요.' };
   },
   // key: 누른 화면의 대진(팀 구성). 그사이 '다시 짜기'로 바뀌었으면 거절
   win: ({ r, m, key, winner }) => {
@@ -167,6 +190,27 @@ const actions = {
   },
 
   'cycle-level': (el) => run('level', { id: +el.dataset.id }),
+
+  // 같이 치기 요청 만들기 (고르는 중인 상태는 이 기기 화면에만)
+  'wish-kind': (el) => {
+    wishDraft.kind = el.dataset.kind;
+    wishDraft.ids = wishDraft.ids.slice(0, WISH_SIZE[wishDraft.kind]);
+    renderAll();
+  },
+  'wish-mode': (el) => { wishDraft.fixed = el.dataset.fixed === '1'; renderAll(); },
+  'wish-pick': (el) => {
+    const id = +el.dataset.id, n = WISH_SIZE[wishDraft.kind];
+    if (wishDraft.ids.includes(id)) wishDraft.ids = wishDraft.ids.filter((x) => x !== id);
+    else if (wishDraft.ids.length < n) wishDraft.ids.push(id);
+    else { toast(`${n}명까지 고를 수 있어요. 고른 사람을 다시 누르면 빠져요.`); return; }
+    renderAll();
+  },
+  'wish-add': async () => {
+    const res = await run('wish-add', { kind: wishDraft.kind, ids: wishDraft.ids, fixed: wishDraft.fixed });
+    if (res && res.ok) { wishDraft.ids = []; renderAll(); }
+  },
+  'wish-del': (el) => run('wish-del', { id: +el.dataset.id }),
+  'wish-fix': (el) => run('wish-fix', { id: +el.dataset.id, fixed: el.dataset.fixed !== '1' }),
   'cycle-gender': (el) => run('gender', { id: +el.dataset.id }),
 
   remove: (el) => {
