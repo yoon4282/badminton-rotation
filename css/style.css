@@ -258,3 +258,21 @@ body.modal-open { overflow: hidden; }
   .plist > .hint { grid-column: 1 / -1; }
   .mgrid[data-n="3"], .mgrid[data-n="5"], .mgrid[data-n="6"], .mgrid[data-n="7"] { grid-template-columns: repeat(3, 1fr); }
 }
+
+/* 같이 치기 요청 */
+.wlist { list-style: none; margin: 6px 0 0; padding: 0; }
+.wrow { display: flex; align-items: center; gap: 8px; padding: 8px 0; border-top: 1px solid var(--line); }
+.wrow:first-child { border-top: 0; }
+.wkind { flex: none; font-size: 12px; font-weight: 800; padding: 3px 8px; border-radius: 99px; background: #e3f4ee; color: var(--primary-d); }
+.wkind.wk-court { background: #fff1d6; color: #8a5a00; }
+.wkind.wk-group { background: #f3e5ff; color: #7b2cbf; }
+.wname { flex: 1; min-width: 0; font-weight: 600; word-break: keep-all; }
+.wname small { display: block; color: var(--muted); font-weight: 400; }
+.wmode { flex: none; min-height: 36px; padding: 0 10px; border: 1px solid var(--line); border-radius: 10px; background: #fff; font-size: 13px; font-weight: 700; color: var(--muted); }
+.wmode.fixed { border-color: var(--primary); color: var(--primary-d); background: #e3f4ee; }
+#wish-kind button small { font-weight: 400; opacity: .8; }
+.wpicks { display: flex; flex-wrap: wrap; gap: 6px; margin: 10px 0; }
+.wpick { min-height: 40px; padding: 0 12px; border: 1px solid var(--line); border-radius: 99px; background: #fff; font-weight: 600; font-size: 14px; display: inline-flex; align-items: center; gap: 4px; }
+.wpick.on { background: var(--primary); border-color: var(--primary); color: #fff; }
+.mtype.t-wish { background: #e3f4ee; color: var(--primary-d); margin-left: 6px; }
+.wish-wait { background: #e9f6f1; }

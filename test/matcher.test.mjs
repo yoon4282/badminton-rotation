@@ -207,4 +207,76 @@ Bob
   assert.equal(c.find((x) => x.name === 'Bob').likely, false);
 }
 
+// 12) 같이 치기 요청: 같은 편 / 같은 코트 / 4명 묶음, 고정 요청은 매 라운드, 경기 수 공평 유지
+{
+  const sameCourt = (m, ids) => ids.every((id) => m.teamA.includes(id) || m.teamB.includes(id));
+  const sameTeam = (m, ids) => ids.every((id) => m.teamA.includes(id)) || ids.every((id) => m.teamB.includes(id));
+  const SEEDS = 20;
+  let hit = { team: 0, court: 0, group: 0 }, tries = { team: 0, court: 0, group: 0 }, spread = 0;
+  for (let s = 0; s < SEEDS; s++) {
+    // 14명 3코트(2명 휴식), 고정 요청 3개: 같은 편(남1·여1), 같은 코트(남2), 4명 묶음(남2·여2)
+    const players = mk(14), rounds = [];
+    const wishes = [
+      { id: 1, kind: 'team', ids: [1, 2], fixed: true },
+      { id: 2, kind: 'court', ids: [3, 5], fixed: true },
+      { id: 3, kind: 'group', ids: [7, 8, 9, 10], fixed: true },
+    ];
+    for (let i = 0; i < 7; i++) {
+      const r = generateRound({ players, rounds, courts: 3, wishes });
+      assert.ok(!r.error, r.error);
+      rounds.push(r.round);
+      for (const w of wishes) {
+        const playing = w.ids.filter((id) => !r.round.resting.includes(id));
+        if (playing.length !== w.ids.length) continue; // 쉬는 차례
+        tries[w.kind]++;
+        const m = r.round.matches.find((x) => sameCourt(x, w.ids));
+        const ok = m && (w.kind !== 'team' || sameTeam(m, w.ids));
+        if (ok) { hit[w.kind]++; assert.ok(r.round.granted.includes(w.id)); assert.ok(m.wish); }
+      }
+    }
+    const g = gamesOf(rounds), v = players.map((p) => g.get(p.id) || 0);
+    assert.ok(Math.max(...v) - Math.min(...v) <= 1, '요청이 있어도 경기 수 편차 ≤1: ' + v);
+    spread = Math.max(spread, Math.max(...v) - Math.min(...v));
+    // 남복 vs 여복 금지는 그대로
+    for (const r of rounds) for (const m of r.matches) {
+      const kind = (t) => { const a = players[t[0] - 1].gender, b = players[t[1] - 1].gender; return a === b ? a : 'X'; };
+      const ka = kind(m.teamA), kb = kind(m.teamB);
+      assert.ok(!((ka === 'M' && kb === 'F') || (ka === 'F' && kb === 'M')), '남복 vs 여복');
+    }
+  }
+  const rate = (k) => hit[k] / tries[k];
+  console.log(`[12] 함께 뛴 라운드에서 요청 반영률: 같은 편 ${(rate('team') * 100).toFixed(0)}% · 같은 코트 ${(rate('court') * 100).toFixed(0)}% · 4명 ${(rate('group') * 100).toFixed(0)}% | 경기 수 최대 편차 ${spread}`);
+  assert.ok(rate('team') >= 0.95 && rate('court') >= 0.95 && rate('group') >= 0.95);
+}
+
+// 12-2) 요청한 사람이 함께 뛰는 비율: 일부만 쉬는 일이 거의 없다 (14명 3코트, 같은 편 고정)
+{
+  let together = 0, total = 0;
+  for (let s = 0; s < 20; s++) {
+    const players = mk(14), rounds = [];
+    const wishes = [{ id: 1, kind: 'team', ids: [1, 6], fixed: true }];
+    for (let i = 0; i < 7; i++) {
+      const r = generateRound({ players, rounds, courts: 3, wishes });
+      rounds.push(r.round);
+      const rest = [1, 6].filter((id) => r.round.resting.includes(id)).length;
+      total++;
+      if (rest !== 1) together++;
+    }
+  }
+  console.log(`[12-2] 같은 편 요청 둘이 같이 뛰거나 같이 쉰 라운드: ${together}/${total}`);
+  assert.ok(together / total >= 0.85);
+}
+
+// 12-3) 한 번 요청은 들어주면 granted에 들어가고, 쉬는 사람이 있는 요청은 반영하지 않는다
+{
+  const players = mk(12);
+  const r = generateRound({ players, rounds: [], courts: 3, wishes: [{ id: 5, kind: 'court', ids: [1, 12], fixed: false }] });
+  assert.deepEqual(r.round.granted, [5]);
+  players[11].active = false;
+  const r2 = generateRound({ players, rounds: [], courts: 2, wishes: [{ id: 5, kind: 'court', ids: [1, 12], fixed: false }] });
+  assert.ok(!r2.round.granted);
+  // 요청이 없으면 granted 자체가 없다 (기존 기록 형식 유지)
+  assert.equal(generateRound({ players: mk(8), rounds: [], courts: 2 }).round.granted, undefined);
+}
+
 console.log('모든 테스트 통과');

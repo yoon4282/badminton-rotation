@@ -147,6 +147,30 @@
         <p class="hint">급수 글자를 누르면 바뀌고, 스위치로 휴식·조기귀가를 켜고 끌 수 있어요. 변경은 다음 라운드(또는 ‘다시 짜기’)부터 반영돼요.</p>
       </div>
 
+      <div class="card" id="wish-card">
+        <div class="row between">
+          <strong>🔗 같이 치기</strong>
+          <span id="wish-summary" class="hint"></span>
+        </div>
+        <ul id="wish-list" class="wlist"></ul>
+        <details class="bulk" id="wish-new">
+          <summary>같이 치고 싶은 사람 고르기</summary>
+          <div class="seg" id="wish-kind" role="radiogroup" aria-label="요청 종류">
+            <button type="button" data-action="wish-kind" data-kind="team" aria-pressed="true">같은 편<br><small>2명</small></button>
+            <button type="button" data-action="wish-kind" data-kind="court" aria-pressed="false">같은 코트<br><small>2명</small></button>
+            <button type="button" data-action="wish-kind" data-kind="group" aria-pressed="false">한 코트<br><small>4명</small></button>
+          </div>
+          <div class="seg two" id="wish-mode" role="radiogroup" aria-label="반복">
+            <button type="button" data-action="wish-mode" data-fixed="0" aria-pressed="true">1️⃣ 다음 판 한 번</button>
+            <button type="button" data-action="wish-mode" data-fixed="1" aria-pressed="false">🔁 계속</button>
+          </div>
+          <p id="wish-guide" class="hint"></p>
+          <div id="wish-pick" class="wpicks"></div>
+          <button type="button" id="wish-add" class="btn primary big" data-action="wish-add" disabled>2명을 골라 주세요</button>
+          <p class="hint">경기 수 공평이 먼저라, 둘 중 한 명이 쉴 차례면 경기 수가 같은 사람과 바꿔 같이 뛰게(또는 같이 쉬게) 해요. 못 들어준 한 번 요청은 다음 판에 다시 시도해요.</p>
+        </details>
+      </div>
+
       <div class="card host-only">
         <div class="row gap">
           <button type="button" class="btn grow" data-action="reset-rounds">새 경기 시작<br><small>명단 유지·기록 삭제</small></button>
