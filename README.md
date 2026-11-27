@@ -60,6 +60,7 @@ npm test
 ```
 
 ## GitHub Pages 배포
+0. JS·CSS를 고쳤으면 커밋 전에 `npm run stamp` (휴대폰이 예전 파일을 캐시로 쓰지 않도록 `index.html`에 파일별 버전을 적어요. 잊으면 `npm test`가 실패해서 알려 줘요)
 1. 이 폴더를 GitHub 저장소에 push
 2. Settings → Pages → Branch: `main` / `/ (root)` 선택
 3. 발급된 URL로 접속
