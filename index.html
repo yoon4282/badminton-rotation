@@ -6,8 +6,8 @@
   <meta name="theme-color" content="#14705a">
   <title>배드민턴 대진표</title>
   <!-- stamp:start (node scripts/stamp.mjs 가 자동 생성) -->
-  <script type="importmap">{"imports":{"./js/admin.js":"./js/admin.js?v=65825537","./js/boot.js":"./js/boot.js?v=557d24bd","./js/config.js":"./js/config.js?v=d081b182","./js/invite.js":"./js/invite.js?v=0074cf09","./js/join.js":"./js/join.js?v=28bf4d8b","./js/kakao.js":"./js/kakao.js?v=137b7dc0","./js/main.js":"./js/main.js?v=e698a209","./js/matcher.js":"./js/matcher.js?v=941b6681","./js/ocr-parse.js":"./js/ocr-parse.js?v=2db696f4","./js/ocr.js":"./js/ocr.js?v=2db30195","./js/p2p.js":"./js/p2p.js?v=e1dab2c6","./js/players.js":"./js/players.js?v=304b6866","./js/ref.js":"./js/ref.js?v=1318674a","./js/referee-host.js":"./js/referee-host.js?v=076f4d1a","./js/roster.js":"./js/roster.js?v=d6da554a","./js/score.js":"./js/score.js?v=679b3053","./js/share.js":"./js/share.js?v=3dc51cb3","./js/state.js":"./js/state.js?v=ecf1810e","./js/stats.js":"./js/stats.js?v=8f36000a","./js/ui.js":"./js/ui.js?v=33b937a8","./js/wishes.js":"./js/wishes.js?v=8222963a"}}</script>
-  <link rel="stylesheet" href="css/style.css?v=73898e2e">
+  <script type="importmap">{"imports":{"./js/admin.js":"./js/admin.js?v=65825537","./js/boot.js":"./js/boot.js?v=557d24bd","./js/config.js":"./js/config.js?v=d081b182","./js/invite.js":"./js/invite.js?v=0074cf09","./js/join.js":"./js/join.js?v=28bf4d8b","./js/kakao.js":"./js/kakao.js?v=137b7dc0","./js/main.js":"./js/main.js?v=46c9c49b","./js/matcher.js":"./js/matcher.js?v=941b6681","./js/ocr-parse.js":"./js/ocr-parse.js?v=2db696f4","./js/ocr.js":"./js/ocr.js?v=2db30195","./js/p2p.js":"./js/p2p.js?v=e1dab2c6","./js/players.js":"./js/players.js?v=304b6866","./js/ref.js":"./js/ref.js?v=f80331c7","./js/referee-host.js":"./js/referee-host.js?v=24f92049","./js/roster.js":"./js/roster.js?v=d6da554a","./js/score.js":"./js/score.js?v=679b3053","./js/share.js":"./js/share.js?v=3dc51cb3","./js/state.js":"./js/state.js?v=ecf1810e","./js/stats.js":"./js/stats.js?v=8f36000a","./js/ui.js":"./js/ui.js?v=5d4fae0c","./js/wishes.js":"./js/wishes.js?v=8222963a"}}</script>
+  <link rel="stylesheet" href="css/style.css?v=bc6b773d">
   <!-- stamp:end -->
 </head>
 <body>
@@ -86,7 +86,7 @@
   <div id="ref-modal" class="modal" role="dialog" aria-modal="true" aria-labelledby="ref-title-h" hidden>
     <div class="modal-card">
       <h2 id="ref-title-h">🧑‍⚖️ 코트 심판 QR</h2>
-      <p class="hint">심판이 QR을 찍으면 그 코트의 점수판이 열려요. 점수를 누르면 이 화면 대진표에 바로 보이고, 경기가 끝나 <strong>결과 보내기</strong>를 누르면 승패가 입력돼요. 라운드가 바뀌면 같은 코트의 다음 경기로 자동으로 넘어가요.</p>
+      <p class="hint">심판이 QR을 찍으면 그 코트의 점수판이 열려요. 점수를 누르면 이 화면 대진표에 바로 보이고, 경기가 끝나 <strong>결과 보내기</strong>를 누르면 승패가 입력돼요. 심판 화면은 이 코트에서 <strong>아직 결과가 없는 가장 앞 라운드</strong>를 보여 주고, 결과를 보내면 다음 라운드로 넘어가요(미리 짜 둔 라운드도 OK). 심판이 라운드를 직접 고를 수도 있어요.</p>
       <div class="seg" id="ref-courts" role="radiogroup" aria-label="코트"></div>
       <div class="seg" id="ref-to" role="radiogroup" aria-label="경기 점수">
         <button type="button" data-to="15" aria-pressed="false">15점</button>

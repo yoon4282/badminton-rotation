@@ -1,6 +1,7 @@
 // 코트 심판 점수판 화면 (?ref=방ID&court=코트&key=심판키)
 // 메인 관리자 기기가 점수의 주인: 점수 버튼은 요청만 보내고, 메인이 반영한 화면 정보(snap)를 받아 다시 그린다.
-// 링크가 코트에 묶여 있어서 라운드가 바뀌면 같은 코트의 다음 경기가 자동으로 뜬다.
+// 링크가 코트에 묶여 있고, 기본으로 그 코트에서 아직 결과가 없는 가장 앞 라운드를 보여 준다(미리 짜 둔 라운드 포함).
+// 결과를 보내면 다음 라운드로 넘어가고, 라운드 칩으로 직접 고를 수도 있다.
 import { createAdminClient } from './p2p.js';
 import { gameState } from './score.js';
 
@@ -15,6 +16,27 @@ let busy = false;
 let link = 'connecting';
 let swapped = false;  // 화면 좌우 바꾸기 (이 기기에서만)
 let lastKey = null;
+let sel = null;       // 직접 고른 라운드 ri (null이면 자동)
+
+// 지금 보여 줄 라운드의 경기
+function current() {
+  if (!view || !view.rounds || !view.rounds.length) return null;
+  if (sel !== null) {
+    const m = view.rounds.find((x) => x.ri === sel);
+    if (m) return m;
+    sel = null; // 라운드가 지워졌으면 자동으로
+  }
+  return view.rounds.find((x) => x.ri === view.auto) || view.rounds[view.rounds.length - 1];
+}
+
+// 라운드 고르기 칩: 자동 + 이 코트 경기가 있는 라운드들 (✅ 결과 있음, ● 점수 진행 중)
+function roundChips(m) {
+  const chips = view.rounds.map((x) => {
+    const mark = x.winner ? ' ✅' : x.score && x.score.log.length ? ' ●' : '';
+    return `<button type="button" class="rchip${x.ri === m.ri ? ' on' : ''}${x.ri === view.auto ? ' next' : ''}" data-ref="pick" data-ri="${x.ri}">${x.no}R${mark}</button>`;
+  }).join('');
+  return `<div class="rchips"><button type="button" class="rchip auto${sel === null ? ' on' : ''}" data-ref="pick" data-ri="auto">자동</button>${chips}</div>`;
+}
 let msgTimer = null;
 
 const LINK_TEXT = {
@@ -59,9 +81,9 @@ function render() {
     return;
   }
   $('ref-title').textContent = `🧑‍⚖️ ${view.court}코트 심판`;
-  const m = view.match;
+  const m = current();
   if (!m) {
-    body.innerHTML = `<p class="rwait">${view.round ? `${view.round}라운드에는 ${view.court}코트 경기가 없어요.` : '아직 대진이 없어요.'}<br>대진이 나오면 이 화면에 자동으로 떠요.</p>`;
+    body.innerHTML = `<p class="rwait">${view.total ? `아직 ${view.court}코트 경기가 없어요.` : '아직 대진이 없어요.'}<br>대진이 나오면 이 화면에 자동으로 떠요.</p>`;
     return;
   }
   const deuce = view.deuce !== false;
@@ -70,7 +92,7 @@ function render() {
   const fresh = !m.score.log.length && !m.score.done;
   let banner = '';
   if (m.score.done) {
-    banner = `<div class="rbanner done">✅ 결과를 보냈어요 · ${st.winner}팀 승 ${st.a}:${st.b}<small>다음 라운드 대진이 나오면 자동으로 넘어가요</small></div>`;
+    banner = `<div class="rbanner done">✅ 결과를 보냈어요 · ${st.winner}팀 승 ${st.a}:${st.b}<small>${sel !== null ? '‘자동’을 누르면 결과가 없는 다음 경기로 가요' : '다음 라운드 대진이 나오면 자동으로 넘어가요'}</small></div>`;
   } else if (st.over) {
     banner = `<button type="button" class="btn primary big full rfinish" data-ref="finish" ${busy ? 'disabled' : ''}>🏆 ${st.winner}팀 승리 ${st.a}:${st.b} · 결과 보내기</button>`;
   } else if (m.winner) {
@@ -79,7 +101,8 @@ function render() {
     banner = '<div class="rbanner deuce">듀스! 2점 먼저 앞서면 승리</div>';
   }
   body.innerHTML = `
-    <div class="rmeta">${view.round}라운드${m.type ? ` · ${esc(m.type)}` : ''} · ${view.scoreTo}점 경기 · ${deuce ? `듀스 있음(최대 ${st.cap}점)` : '듀스 없음'}</div>
+    ${roundChips(m)}
+    <div class="rmeta"><b>${m.no}라운드</b>${sel !== null && m.ri !== view.auto ? ' (직접 고름)' : ''}${m.type ? ` · ${esc(m.type)}` : ''} · ${view.scoreTo}점 경기 · ${deuce ? `듀스 있음(최대 ${st.cap}점)` : '듀스 없음'}</div>
     ${fresh ? `<div class="rfirst"><span>먼저 서브할 팀</span>
       <div class="seg two">${['A', 'B'].map((t) => `<button type="button" data-ref="serve" data-team="${t}" aria-pressed="${m.score.first === t}" ${busy ? 'disabled' : ''}>${t}팀</button>`).join('')}</div></div>` : ''}
     <div class="rboard">${sides.map((t) => side(t, m, st)).join('')}</div>
@@ -94,13 +117,15 @@ function render() {
 }
 
 async function send(op, args = {}) {
-  if (busy || !view || !view.match) return;
+  const m = current();
+  if (busy || !m) return;
   busy = true;
   render();
   try {
-    const res = await client.send(op, { ...args, key: view.match.key, v: view.match.score.v });
+    const res = await client.send(op, { ...args, ri: m.ri, key: m.key, v: m.score.v });
     if (!res.ok) flash(res.error || '반영하지 못했어요.');
     else if (op === 'point' && navigator.vibrate) navigator.vibrate(25);
+    else if (op === 'finish') sel = null; // 결과를 보내면 다음(결과 없는) 경기로
   } catch (e) {
     flash('메인 관리자와 연결이 끊겨 반영되지 않았어요. 연결되면 다시 눌러 주세요.');
   } finally {
@@ -122,13 +147,14 @@ export function startRef(hostId, court, key) {
   render();
   client = createAdminClient(hostId, { type: 'ref-hello', key, court }, {
     onSnap: (s) => {
-      const k = s && s.match ? s.match.key : null;
+      view = s;
+      const m = current();
+      const k = m ? m.key : null;
       if (lastKey !== null && k && k !== lastKey) {
-        flash(`새 경기! ${s.round}라운드 ${s.court}코트`);
+        flash(`다음 경기! ${m.no}라운드 ${s.court}코트`);
         if (navigator.vibrate) navigator.vibrate([60, 60, 60]);
       }
       lastKey = k;
-      view = s;
       render();
     },
     onStatus: (s) => { link = s; render(); },
@@ -148,10 +174,16 @@ export function startRef(hostId, court, key) {
       swapped = !swapped;
       try { localStorage.setItem(SWAP_STORE, swapped ? '1' : '0'); } catch (e2) { /* 무시 */ }
       render();
+    } else if (act === 'pick') {
+      sel = b.dataset.ri === 'auto' ? null : +b.dataset.ri;
+      const m = current();
+      lastKey = m ? m.key : null;
+      render();
     } else if (act === 'point' || act === 'serve') send(act, { team: b.dataset.team });
     else if (act === 'finish') send('finish');
     else if (act === 'undo') {
-      if (view && view.match && view.match.score.done && !confirm('보낸 결과를 취소할까요?')) return;
+      const m = current();
+      if (m && m.score.done && !confirm('보낸 결과를 취소할까요?')) return;
       send('undo');
     }
   });

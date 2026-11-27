@@ -132,27 +132,31 @@ const ops = {
 const HOST_ONLY = new Set(['reset-rounds', 'reset-all']);
 
 // ───── 코트 심판 (메인 관리자 기기에서만 실행) ─────
-// 심판은 연결할 때 정한 코트의 '현재 라운드' 경기만 조작한다. key(라운드+대진)와 v(점수 버전)가 다르면 거절.
+// 심판은 연결할 때 정한 코트의 경기만 조작한다. 라운드는 고를 수 있고(미리 짜 둔 라운드·지난 라운드),
+// 기본은 그 코트에서 아직 결과가 없는 가장 앞 라운드. key(라운드+대진)와 v(점수 버전)가 다르면 거절.
 const ruleText = () => `${state.scoreTo}점 · ${state.deuce ? `듀스 있음(최대 ${capOf(state.scoreTo, true)}점)` : '듀스 없음'}`;
 const refKey = (ri, m) => `${ri}:${matchKey(m)}`;
 const pinfo = (id) => { const p = findP(id); return p ? { name: p.name, level: p.level, gender: p.gender || null } : { name: '?' }; };
 
 function refView(court) {
-  const ri = state.rounds.length - 1, r = state.rounds[ri];
-  const m = r && r.matches.find((x) => x.court === court);
-  return {
-    court, round: r ? r.no : 0, scoreTo: state.scoreTo, deuce: state.deuce,
-    match: m ? {
-      key: refKey(ri, m), type: m.type || null, winner: m.winner,
+  const rounds = [];
+  state.rounds.forEach((r, ri) => {
+    const m = r.matches.find((x) => x.court === court);
+    if (!m) return;
+    rounds.push({
+      ri, no: r.no, key: refKey(ri, m), type: m.type || null, winner: m.winner,
       teamA: m.teamA.map(pinfo), teamB: m.teamB.map(pinfo), score: m.score || emptyScore(),
-    } : null,
-  };
+    });
+  });
+  // 자동: 결과가 없는 가장 앞 라운드, 다 끝났으면 마지막 라운드
+  const next = rounds.find((x) => !x.winner) || rounds[rounds.length - 1];
+  return { court, scoreTo: state.scoreTo, deuce: state.deuce, total: state.rounds.length, auto: next ? next.ri : null, rounds };
 }
 
 function handleRefOp(court, op, args) {
-  const ri = state.rounds.length - 1;
-  const m = state.rounds[ri]?.matches.find((x) => x.court === court);
-  if (!m) return { ok: false, error: '이번 라운드에 이 코트 경기가 없어요.' };
+  const ri = int(args.ri);
+  const m = Number.isInteger(ri) ? state.rounds[ri]?.matches.find((x) => x.court === court) : null;
+  if (!m) return { ok: false, error: '이 라운드에 이 코트 경기가 없어요.' };
   if (args.key !== refKey(ri, m)) return { ok: false, error: '대진이 바뀌었어요. 화면을 확인해 주세요.' };
   if (!m.score) m.score = emptyScore();
   if (int(args.v) !== m.score.v) return { ok: false, error: '점수가 이미 바뀌었어요. 화면을 확인하고 다시 눌러 주세요.' };
@@ -161,10 +165,10 @@ function handleRefOp(court, op, args) {
   const st = gameState(m.score, state.scoreTo, state.deuce);
   if (op === 'finish') {
     m.winner = st.winner;
-    toast(`🧑‍⚖️ ${court}코트 결과: ${st.winner}팀 승 (${st.a}:${st.b})`);
+    toast(`🧑‍⚖️ ${state.rounds[ri].no}라운드 ${court}코트 결과: ${st.winner}팀 승 (${st.a}:${st.b})`);
   } else if (op === 'undo' && wasDone) {
     m.winner = null;
-    toast(`🧑‍⚖️ ${court}코트 심판이 결과를 취소했어요.`);
+    toast(`🧑‍⚖️ ${state.rounds[ri].no}라운드 ${court}코트 심판이 결과를 취소했어요.`);
   }
   commit();
   return { ok: true };
