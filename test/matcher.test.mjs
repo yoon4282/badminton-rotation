@@ -334,4 +334,46 @@ Bob
   console.log('[13] 점수판 규칙 OK');
 }
 
+// 14) 순위 득실: 심판 점수가 있는 경기만 득점·실점, 승률·승수 같으면 득실차로 순위
+{
+  const { ranking, fmtDiff } = await import('../js/stats.js');
+  const log = (a, b) => [...Array(a).fill('A'), ...Array(b).fill('B')];
+  const players = [1, 2, 3, 4, 5, 6].map((id) => ({ id, name: 'P' + id, level: 'C', active: true }));
+  const st = {
+    players,
+    rounds: [
+      // 1·2팀이 21:10으로 3·4팀 이김 (점수 기록)
+      { matches: [{ teamA: [1, 2], teamB: [3, 4], winner: 'A', score: { log: log(21, 10), done: true } }] },
+      // 5·6팀이 3·4팀 이김 (점수 없음, 승패만)
+      { matches: [{ teamA: [5, 6], teamB: [3, 4], winner: 'A' }] },
+      // 1·2팀이 5·6팀에 19:21로 짐
+      { matches: [{ teamA: [1, 2], teamB: [5, 6], winner: 'B', score: { log: log(19, 21), done: true } }] },
+      // 결과 없는 진행 중 점수는 세지 않음
+      { matches: [{ teamA: [1, 3], teamB: [2, 4], winner: null, score: { log: log(5, 3) } }] },
+    ],
+  };
+  const rows = ranking(st);
+  const by = Object.fromEntries(rows.map((r) => [r.player.name, r]));
+  assert.deepEqual([by.P1.pf, by.P1.pa, by.P1.diff, by.P1.scored], [40, 31, 9, 2]);
+  assert.deepEqual([by.P5.pf, by.P5.pa, by.P5.diff, by.P5.scored], [21, 19, 2, 1]);
+  assert.deepEqual([by.P3.pf, by.P3.pa, by.P3.scored], [10, 21, 1]);
+  assert.equal(fmtDiff(by.P1), '+9');
+  assert.equal(fmtDiff(by.P3), '-11');
+  assert.equal(fmtDiff({ scored: 0 }), '-');
+  // P5·P6 2승0패가 1·2위, P1·P2(1승1패, 득실 +9)는 같은 1승1패 없음 → 3위, P3·P4 0승2패
+  assert.equal(by.P5.rank, 1);
+  assert.equal(by.P1.rank, 3);
+  // 승률·승수 같을 때 득실차로 갈림
+  const tie = {
+    players: players.slice(0, 4),
+    rounds: [
+      { matches: [{ teamA: [1, 2], teamB: [3, 4], winner: 'A', score: { log: log(21, 5) } }] },
+      { matches: [{ teamA: [3, 4], teamB: [1, 2], winner: 'A', score: { log: log(21, 19) } }] },
+    ],
+  };
+  const tr = ranking(tie);
+  assert.deepEqual(tr.map((r) => r.player.name + ':' + r.rank), ['P1:1', 'P2:1', 'P3:3', 'P4:3']);
+  console.log('[14] 순위 득실 OK');
+}
+
 console.log('모든 테스트 통과');

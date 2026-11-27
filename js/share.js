@@ -1,6 +1,6 @@
 // 카카오톡 공유용 텍스트 생성 + 클립보드 복사
 import { state } from './state.js';
-import { ranking, fmtRate } from './stats.js';
+import { ranking, fmtRate, fmtDiff } from './stats.js';
 
 const nm = (id) => {
   const p = state.players.find((x) => x.id === id);
@@ -33,7 +33,7 @@ export function rankText() {
   const lines = ['🏆 현재 순위'];
   for (const r of rows) {
     const mark = r.rank <= 3 ? medal[r.rank - 1] : `${r.rank}위`;
-    lines.push(`${mark} ${r.player.name} ${r.wins}승 ${r.losses}패 (${fmtRate(r)}) · ${r.games}경기`);
+    lines.push(`${mark} ${r.player.name} ${r.wins}승 ${r.losses}패 (${fmtRate(r)}) · ${r.games}경기${r.scored ? ` · 득실 ${fmtDiff(r)}` : ''}`);
   }
   return lines.join('\n');
 }
@@ -66,7 +66,7 @@ export function rankTextKakao(max) {
   const lines = ['🏆 현재 순위'];
   for (let i = 0; i < rows.length; i++) {
     const r = rows[i];
-    const line = `${r.rank}. ${r.player.name} ${r.wins}승${r.losses}패`;
+    const line = `${r.rank}. ${r.player.name} ${r.wins}승${r.losses}패${r.scored ? ` ${fmtDiff(r)}` : ''}`;
     const rest = rows.length - i - 1;
     const tail = rest ? [`…외 ${rest}명`] : [];
     if (!fits([...lines, line, ...tail], max)) { lines.push(`…외 ${rows.length - i}명`); break; }

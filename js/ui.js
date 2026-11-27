@@ -1,6 +1,6 @@
 // 렌더링 (상태를 읽어 HTML 생성)
 import { state } from './state.js';
-import { computeStats, ranking, fmtRate } from './stats.js';
+import { computeStats, ranking, fmtRate, fmtDiff, matchPoints } from './stats.js';
 import { WISH_SIZE } from './matcher.js';
 import { WISH_LABEL } from './wishes.js';
 import { gameState } from './score.js';
@@ -179,6 +179,18 @@ export function renderRound() {
       ${past.map(({ r, i }) => `<details data-r="${i}"${openPast.has(String(i)) ? ' open' : ''}><summary>${r.no}라운드 · 결과 ${doneCount(r)}/${r.matches.length}</summary><div class="mgrid" data-n="${r.matches.length}">${r.matches.map((m) => matchCard(m, i, true)).join('')}</div></details>`).join('')}</div>` : ''}`;
 }
 
+// 승패만 있고 점수가 없는 경기가 있으면 득실 계산 범위를 알려 준다
+function unscoredNote() {
+  let decided = 0, scored = 0;
+  for (const r of state.rounds) for (const m of r.matches) {
+    if (!m.winner) continue;
+    decided++;
+    if (matchPoints(m)) scored++;
+  }
+  if (!decided || scored === decided) return '';
+  return `<p class="hint rank-note">득실은 🧑‍⚖️ 심판 점수판으로 점수를 기록한 경기만 계산해요 (${decided}경기 중 ${scored}경기). 순위는 승률 → 승수 → 득실차 순이에요.</p>`;
+}
+
 export function renderRank() {
   const rows = ranking(state);
   const view = $('#rank-view');
@@ -187,12 +199,14 @@ export function renderRank() {
     return;
   }
   view.innerHTML = `<div class="card">
-    <table class="rank"><thead><tr><th>순위</th><th style="text-align:left">이름</th><th>경기</th><th>승</th><th>패</th><th>승률</th></tr></thead><tbody>
+    <table class="rank"><thead><tr><th>순위</th><th style="text-align:left">이름</th><th>경기</th><th>승</th><th>패</th><th>승률</th><th>득실</th></tr></thead><tbody>
     ${rows.map((r) => `<tr class="${r.player.active ? '' : 'off'} ${r.rank && r.rank <= 3 ? 'top' : ''}">
       <td class="rk">${r.rank ?? '-'}</td>
       <td class="nm">${esc(r.player.name)}${lvBadge(r.player.level)}</td>
-      <td>${r.games}</td><td>${r.wins}</td><td>${r.losses}</td><td class="rt">${fmtRate(r)}</td></tr>`).join('')}
+      <td>${r.games}</td><td>${r.wins}</td><td>${r.losses}</td><td class="rt">${fmtRate(r)}</td>
+      <td class="df ${r.scored ? (r.diff > 0 ? 'plus' : r.diff < 0 ? 'minus' : '') : ''}">${fmtDiff(r)}${r.scored ? `<small>${r.pf}:${r.pa}</small>` : ''}</td></tr>`).join('')}
     </tbody></table>
+    ${unscoredNote()}
     <button type="button" class="btn kakao big" data-action="share-rank">💬 카톡으로 순위표 공유</button>
     <button type="button" class="btn big" data-action="copy-rank">📋 순위표 복사</button>
   </div>`;
