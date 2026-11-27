@@ -279,4 +279,39 @@ Bob
   assert.equal(generateRound({ players: mk(8), rounds: [], courts: 2 }).round.granted, undefined);
 }
 
+// 13) 심판 점수판 규칙: 21점·듀스 2점 차·30점 상한, 서브 위치, 되돌리기/결과 보내기
+{
+  const { gameState, applyScoreOp, emptyScore } = await import('../js/score.js');
+  const play = (seq, to = 21) => { const sc = emptyScore(); for (const t of seq) applyScoreOp(sc, 'point', { team: t }, to); return sc; };
+  const rep = (t, n) => Array(n).fill(t);
+  let st = gameState(play([...rep('A', 21), ...rep('B', 19)]));
+  assert.ok(st.over && st.winner === 'A');
+  const alt = (n) => Array.from({ length: n * 2 }, (_, i) => (i % 2 ? 'B' : 'A')); // A·B 번갈아 n점씩
+  st = gameState(play([...alt(20), 'A']));
+  assert.ok(!st.over, '21:20은 아직');
+  st = gameState(play([...alt(20), 'A', 'A']));
+  assert.ok(st.over && st.winner === 'A', '22:20 승');
+  st = gameState(play([...alt(29), 'B']));
+  assert.ok(st.over && st.winner === 'B' && st.b === 30, '30점 상한');
+  assert.ok(gameState(play(rep('A', 15), 15), 15).over, '15점 경기');
+  // 서브: 처음엔 first, 이후 마지막 랠리 이긴 팀. 서브 팀 점수 짝수=오른쪽
+  const sc = emptyScore('B');
+  assert.equal(gameState(sc).server, 'B');
+  assert.ok(applyScoreOp(sc, 'serve', { team: 'A' }, 21));
+  applyScoreOp(sc, 'point', { team: 'A' }, 21);
+  st = gameState(sc);
+  assert.equal(st.server, 'A'); assert.equal(st.side, 'left');
+  assert.ok(!applyScoreOp(sc, 'serve', { team: 'B' }, 21), '첫 랠리 뒤에는 서브 팀 못 바꿈');
+  // 끝나기 전 결과 보내기 불가, 끝난 뒤 점수 추가 불가
+  assert.ok(!applyScoreOp(sc, 'finish', {}, 21));
+  const done = play(rep('B', 21));
+  assert.ok(!applyScoreOp(done, 'point', { team: 'A' }, 21));
+  const v = done.v;
+  assert.ok(applyScoreOp(done, 'finish', {}, 21) && done.done && done.v === v + 1);
+  assert.ok(applyScoreOp(done, 'undo', {}, 21) && !done.done && done.log.length === 21, '결과 취소는 점수 유지');
+  assert.ok(applyScoreOp(done, 'undo', {}, 21) && done.log.length === 20);
+  assert.ok(gameState(play([...rep('A', 20)])).point === 'A', '게임 포인트');
+  console.log('[13] 점수판 규칙 OK');
+}
+
 console.log('모든 테스트 통과');

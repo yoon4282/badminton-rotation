@@ -7,12 +7,20 @@ const nm = (id) => {
   return p ? `${p.name}(${p.level})` : '?';
 };
 
+// 심판이 결과를 보낸 경기는 최종 점수를 붙인다
+const finalScore = (m) => {
+  if (!m.score || !m.score.done || !m.winner) return '';
+  let a = 0, b = 0;
+  for (const t of m.score.log) { if (t === 'A') a++; else b++; }
+  return ` (${a}:${b})`;
+};
+
 export function roundText() {
   const r = state.rounds[state.rounds.length - 1];
   if (!r) return '';
   const lines = [`🏸 ${r.no}라운드 대진`];
   for (const m of r.matches) {
-    lines.push(`[${m.court}코트${m.type ? ' ' + m.type : ''}] ${m.teamA.map(nm).join('·')} vs ${m.teamB.map(nm).join('·')}`);
+    lines.push(`[${m.court}코트${m.type ? ' ' + m.type : ''}] ${m.teamA.map(nm).join('·')} vs ${m.teamB.map(nm).join('·')}${finalScore(m)}`);
   }
   if (r.resting.length) lines.push(`💤 휴식: ${r.resting.map((id) => nm(id)).join(', ')}`);
   return lines.join('\n');

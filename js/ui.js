@@ -3,6 +3,8 @@ import { state } from './state.js';
 import { computeStats, ranking, fmtRate } from './stats.js';
 import { WISH_SIZE } from './matcher.js';
 import { WISH_LABEL } from './wishes.js';
+import { gameState } from './score.js';
+import { refCounts } from './p2p.js';
 
 // 같이 치기 요청을 만드는 중인 선택 (이 기기 화면에만, 저장하지 않음)
 export const wishDraft = { kind: 'team', fixed: false, ids: [] };
@@ -104,17 +106,27 @@ function renderWishes() {
   btn.textContent = wishDraft.ids.length === n ? `🔗 ${WISH_LABEL[wishDraft.kind]} 요청 추가` : `${n}명을 골라 주세요 (${wishDraft.ids.length}/${n})`;
 }
 
-function matchCard(m, ri) {
+// 심판 점수판 점수 (점수가 하나라도 있을 때)
+function scoreLine(m) {
+  if (!m.score || !m.score.log || !m.score.log.length) return '';
+  const st = gameState(m.score, state.scoreTo);
+  const state2 = m.score.done ? '최종' : st.over ? '경기 끝 · 심판 확인 대기' : '진행 중';
+  return `<div class="mscore${m.score.done ? ' done' : ''}"><span class="sa">${st.a}</span> : <span class="sb">${st.b}</span><small>🧑‍⚖️ ${state2}</small></div>`;
+}
+
+function matchCard(m, ri, live = false) {
   const mi = state.rounds[ri].matches.indexOf(m);
+  const refOn = live && refCounts()[m.court];
   const won = (t) => (m.winner === t ? 'won' : '');
   const on = (t) => (m.winner === t ? 'on' : '');
   return `<article class="match">
-    <header>${m.court}코트${m.wish ? '<span class="mtype t-wish">🔗 같이</span>' : ''}${m.type ? `<span class="mtype ${TYPE_CLASS[m.type] || ''}">${m.type}</span>` : ''}</header>
+    <header>${m.court}코트${live ? `<button type="button" class="refbtn host-only${refOn ? ' on' : ''}" data-action="ref-qr" data-court="${m.court}">🧑‍⚖️ ${refOn ? '심판 연결됨' : '심판 QR'}</button>` : ''}${m.wish ? '<span class="mtype t-wish">🔗 같이</span>' : ''}${m.type ? `<span class="mtype ${TYPE_CLASS[m.type] || ''}">${m.type}</span>` : ''}</header>
     <div class="teams">
       <div class="team a ${won('A')}"><span class="tag">A팀${m.winner === 'A' ? ' 🏆' : ''}</span>${m.teamA.map(chip).join('')}</div>
       <div class="vs">VS</div>
       <div class="team b ${won('B')}"><span class="tag">B팀${m.winner === 'B' ? ' 🏆' : ''}</span>${m.teamB.map(chip).join('')}</div>
     </div>
+    ${scoreLine(m)}
     <div class="win-btns">
       <button type="button" class="win a ${on('A')}" data-action="win" data-r="${ri}" data-m="${mi}" data-team="A">A팀 승</button>
       <button type="button" class="win b ${on('B')}" data-action="win" data-r="${ri}" data-m="${mi}" data-team="B">B팀 승</button>
@@ -154,7 +166,7 @@ export function renderRound() {
   const past = state.rounds.slice(0, -1).map((r, i) => ({ r, i })).reverse();
   view.innerHTML = `
     <div class="round-head"><h2>${cur.no}라운드</h2><span>결과 ${doneCount(cur)}/${cur.matches.length}</span></div>
-    <div class="mgrid" data-n="${cur.matches.length}">${cur.matches.map((m) => matchCard(m, ri)).join('')}</div>
+    <div class="mgrid" data-n="${cur.matches.length}">${cur.matches.map((m) => matchCard(m, ri, true)).join('')}</div>
     ${cur.resting.length ? `<div class="resting">💤 휴식: ${cur.resting.map((id) => { const p = byId(id); return p ? esc(p.name) : '?'; }).join(', ')}</div>` : ''}
     ${waitingWishes()}
     <div class="actions">
