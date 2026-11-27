@@ -58,15 +58,79 @@ function waitOpen(peer, ms) {
 const host = { peer: null, starting: null };
 const replies = new Map(); // reqId → 응답 (재전송 시 중복 등록 방지)
 // onJoin: 참가자 등록 / onOp·checkAdmin·snapshot·onAdmins: 부 관리자 연동
-const handlers = { onJoin: null, onOp: null, checkAdmin: null, snapshot: null, onAdmins: null };
+// checkRef·onRefOp·refView·onRefs: 코트 심판 연동
+const handlers = { onJoin: null, onOp: null, checkAdmin: null, snapshot: null, onAdmins: null, checkRef: null, onRefOp: null, refView: null, onRefs: null };
 const statusListeners = new Set();
 const admins = new Set(); // 인증된 부 관리자 연결
+const refs = new Map(); // 인증된 심판 연결 → 코트 번호
 let lastStatus = null;
 
 function status(s) { lastStatus = s; statusListeners.forEach((f) => { try { f(s); } catch (e) { /* 무시 */ } }); }
 const notifyAdmins = () => { if (handlers.onAdmins) handlers.onAdmins(admins.size); };
 
 export function adminCount() { return admins.size; }
+const notifyRefs = () => { if (handlers.onRefs) handlers.onRefs(refCounts()); };
+
+// 코트별 연결된 심판 수 {코트: 명}
+export function refCounts() {
+  const c = {};
+  for (const [conn, court] of refs) if (conn.open) c[court] = (c[court] || 0) + 1;
+  return c;
+}
+
+// 상태가 바뀔 때마다 심판마다 자기 코트 화면 정보를 보낸다
+export function broadcastRefs() {
+  if (!handlers.refView) return;
+  for (const [c, court] of refs) {
+    if (!c.open) { refs.delete(c); continue; }
+    try { c.send({ type: 'snap', s: handlers.refView(court) }); } catch (e) { /* 무시 */ }
+  }
+}
+
+// 심판 링크를 새로 만들면 기존 심판은 끊는다
+export function kickRefs() {
+  for (const [c] of refs) {
+    try { c.send({ type: 'denied' }); } catch (e) { /* 무시 */ }
+    setTimeout(() => { try { c.close(); } catch (e) { /* 무시 */ } }, 500);
+  }
+  refs.clear();
+  notifyRefs();
+}
+
+function cacheReply(conn, reqId, res) {
+  const reply = { type: 'ack', reqId, ...res };
+  replies.set(reqId, reply);
+  if (replies.size > 300) replies.delete(replies.keys().next().value);
+  conn.send(reply);
+}
+
+function handleRef(conn, msg) {
+  if (msg.type === 'ref-hello') {
+    const court = parseInt(msg.court, 10);
+    if (!handlers.checkRef || !handlers.checkRef(msg.key) || !(court >= 1 && court <= 8)) {
+      conn.send({ type: 'denied' });
+      setTimeout(() => { try { conn.close(); } catch (e) { /* 무시 */ } }, 500);
+      return;
+    }
+    if (!refs.has(conn)) {
+      const drop = () => { if (refs.delete(conn)) notifyRefs(); };
+      conn.on('close', drop);
+      conn.on('error', drop);
+    }
+    refs.set(conn, court);
+    conn.send({ type: 'snap', s: handlers.refView(court), full: true });
+    notifyRefs();
+    return;
+  }
+  // msg.type === 'ref-op': 코트는 연결할 때 정해진 것만 쓴다
+  const reqId = msg.reqId;
+  if (typeof reqId !== 'string' || reqId.length > 64) return;
+  if (!refs.has(conn)) { conn.send({ type: 'ack', reqId, ok: false, error: '심판 권한이 없어요.' }); return; }
+  if (replies.has(reqId)) { conn.send(replies.get(reqId)); return; }
+  let res;
+  try { res = handlers.onRefOp(refs.get(conn), String(msg.op || ''), msg.args && typeof msg.args === 'object' ? msg.args : {}); } catch (e) { res = { ok: false, error: '처리 중 오류가 났어요.' }; }
+  cacheReply(conn, reqId, res);
+}
 
 // 메인 상태가 바뀔 때마다 부 관리자 화면에 전체 상태를 보낸다
 export function broadcastAdmins(msg) {
@@ -129,6 +193,7 @@ function validate(msg) {
 
 function handleData(conn, msg) {
   if (msg && (msg.type === 'admin-hello' || msg.type === 'op')) { handleAdmin(conn, msg); return; }
+  if (msg && (msg.type === 'ref-hello' || msg.type === 'ref-op')) { handleRef(conn, msg); return; }
   if (!handlers.onJoin) return;
   const reqId = msg && msg.reqId;
   if (typeof reqId === 'string' && replies.has(reqId)) { conn.send(replies.get(reqId)); return; }
@@ -163,9 +228,14 @@ function createPeer(id) {
   return peer;
 }
 
+// 연결을 시작하지 않고 핸들러만 등록 (어느 버튼으로 연결을 켜든 심판·부 관리자를 받을 수 있게)
+export function setHostHandlers(h = {}) {
+  for (const k of Object.keys(handlers)) if (h[k]) handlers[k] = h[k];
+}
+
 // 이미 열려 있으면 같은 방 ID를 재사용, 끊겼으면 재연결, 죽었으면 새로 생성
 export function startHost(h = {}) {
-  for (const k of Object.keys(handlers)) if (h[k]) handlers[k] = h[k];
+  setHostHandlers(h);
   if (h.onStatus) { statusListeners.add(h.onStatus); }
   if (host.peer && !host.peer.destroyed) {
     if (host.peer.open) { status('ready'); return Promise.resolve(host.peer.id); }
@@ -199,9 +269,11 @@ export function startHost(h = {}) {
 export const hostId = () => (host.peer && host.peer.open ? host.peer.id : null);
 export const hostStatus = () => lastStatus;
 
-// ───────── 부 관리자(메인 관리자 화면에 붙어 같은 상태를 보고 조작) ─────────
-// 메인 관리자가 상태의 주인이다. 부 관리자는 조작 요청(op)만 보내고, 메인이 반영한 전체 상태(snap)를 받아 그린다.
-export function createAdminClient(hostPeerId, key, { onSnap, onStatus, onDenied }) {
+// ───────── 부 관리자·심판(메인 관리자 화면에 붙어 상태를 받아 보고 조작 요청) ─────────
+// 메인 관리자가 상태의 주인이다. 클라이언트는 조작 요청(op)만 보내고, 메인이 반영한 상태(snap)를 받아 그린다.
+// hello: 연결 직후 보내는 인사 (부 관리자 {type:'admin-hello', key} / 심판 {type:'ref-hello', key, court})
+// opType: 조작 요청 메시지 종류 (부 관리자 'op' / 심판 'ref-op')
+export function createAdminClient(hostPeerId, hello, { onSnap, onStatus, onDenied }, opType = 'op') {
   let peer = null, conn = null, stopped = false, timer = null, connecting = false;
   const pending = new Map(); // reqId → {resolve, reject, t}
 
@@ -254,7 +326,7 @@ export function createAdminClient(hostPeerId, key, { onSnap, onStatus, onDenied 
       c.on('data', onData);
       c.on('close', () => lost(c));
       c.on('error', () => lost(c));
-      c.send({ type: 'admin-hello', key });
+      c.send(hello);
     } catch (e) {
       if (!stopped) { onStatus('reconnecting'); schedule(); }
     } finally {
@@ -274,7 +346,7 @@ export function createAdminClient(hostPeerId, key, { onSnap, onStatus, onDenied 
     return new Promise((resolve, reject) => {
       const t = setTimeout(() => { pending.delete(reqId); reject(new Error('timeout')); lost(c); }, 10000);
       pending.set(reqId, { resolve, reject, t });
-      try { c.send({ type: 'op', reqId, op, args }); } catch (e) { clearTimeout(t); pending.delete(reqId); reject(e); }
+      try { c.send({ type: opType, reqId, op, args }); } catch (e) { clearTimeout(t); pending.delete(reqId); reject(e); }
     });
   }
 

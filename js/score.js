@@ -1,0 +1,51 @@
+// 점수판 규칙 (순수 함수, DOM 의존 없음)
+// 랠리 포인트: 목표 점수(15/21/25) 먼저.
+// 듀스 있음: 목표-1 동점부터 2점 차가 나야 승리, 최대 점수(15점 경기 21점, 21·25점 경기 31점)에 먼저 닿으면 승리.
+// 듀스 없음: 목표 점수에 먼저 닿으면 바로 승리.
+// score = { first:'A'|'B', log:['A','B',...], v:버전, done:결과 보냈는지 }
+export const SCORE_TO = [15, 21, 25];
+export const capOf = (to, deuce = true) => (!deuce ? to : to === 15 ? 21 : 31);
+
+export const emptyScore = (first = 'A') => ({ first, log: [], v: 0, done: false });
+
+export function gameState(score, to = 21, deuce = true) {
+  const log = (score && score.log) || [];
+  let a = 0, b = 0;
+  for (const t of log) { if (t === 'A') a++; else b++; }
+  const hi = Math.max(a, b), cap = capOf(to, deuce);
+  const need = deuce ? 2 : 1; // 이기는 데 필요한 점수 차
+  const over = (hi >= to && Math.abs(a - b) >= need) || hi >= cap;
+  const winner = over ? (a > b ? 'A' : 'B') : null;
+  // 서브: 마지막 랠리를 딴 팀 (첫 랠리 전에는 먼저 서브하는 팀). 서브 팀 점수가 짝수면 오른쪽, 홀수면 왼쪽.
+  const server = log.length ? log[log.length - 1] : ((score && score.first) || 'A');
+  const own = server === 'A' ? a : b;
+  // 게임 포인트: 한 점만 더 따면 이기는 팀 ('A'·'B', 둘 다면 'AB' — 듀스 없음 20:20, 최대 점수 직전 동점)
+  const wins = (x, y) => (x + 1 >= to && x + 1 - y >= need) || x + 1 >= cap;
+  const point = over ? null : ((wins(a, b) ? 'A' : '') + (wins(b, a) ? 'B' : '')) || null;
+  return { a, b, over, winner, server, side: own % 2 === 0 ? 'right' : 'left', point, deuce: deuce && !over && a === b && a >= to - 1, cap };
+}
+
+// 점수판 조작 (score를 직접 바꾸고 true/false 반환). 호스트(메인 관리자)에서만 실행된다.
+export function applyScoreOp(score, op, args, to, deuce = true) {
+  const st = gameState(score, to, deuce);
+  if (op === 'serve') {
+    if (score.log.length || score.done) return false;
+    score.first = args.team === 'B' ? 'B' : 'A';
+  } else if (op === 'point') {
+    if (st.over || score.done) return false;
+    if (args.team !== 'A' && args.team !== 'B') return false;
+    if (score.log.length >= 80) return false;
+    score.log.push(args.team);
+  } else if (op === 'undo') {
+    if (score.done) score.done = false; // 결과 보낸 뒤 되돌리기 = 결과 취소
+    else if (score.log.length) score.log.pop();
+    else return false;
+  } else if (op === 'finish') {
+    if (!st.over || score.done) return false;
+    score.done = true;
+  } else {
+    return false;
+  }
+  score.v++;
+  return true;
+}

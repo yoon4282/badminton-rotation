@@ -3,6 +3,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "test": "node test/matcher.test.mjs"
+    "test": "node test/matcher.test.mjs && node scripts/stamp.mjs --check",
+    "stamp": "node scripts/stamp.mjs"
   }
 }
